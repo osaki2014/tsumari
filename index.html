@@ -422,6 +422,10 @@
   let geminiKey = '';
   let geminiFreeKey = '';
 
+  // Chrome内蔵AIは一度だけ作って使い回す
+  let chromeAISession = null;
+  let chromeAIInitPromise = null;
+
   let state = freshState();
 
   function freshState(){
@@ -869,7 +873,8 @@ Web検索ツールが利用できない場合は、原文との比較と、あ�
         <b>完全無料・APIキー不要です。</b>
         <div class="free-note">
           Chromeに内蔵されたGemini Nanoで、この端末の中だけで文章を処理します。
-          初回だけAIモデルのダウンロードが必要です。以後はAPI料金がかかりません。
+          初回だけAIモデルのダウンロードが必要です。100%まで終われば、このタブではAIセッションを使い回すため、
+          2回目以降のボタン操作は大幅に速くなります。以後はAPI料金がかかりません。
         </div>
         <div class="warning" style="margin-top:10px">
           Chrome 148以降の対応PCが必要です。macOS 13以降、Windows 10/11などで、
@@ -989,53 +994,91 @@ Web検索ツールが利用できない場合は、原文との比較と、あ�
     }
   }
 
-  async function createChromeAISession(onProgress){
-    const availability=await chromeAIAvailability();
-    if(availability==='unavailable'){
-      const e=new Error('このPCではChrome内蔵AIを利用できません。対応条件を満たしていない可能性があります。Gemini無料枠を選んでください。');
-      e.kind='unsupported';
-      throw e;
-    }
+  async function getChromeAISession(onProgress){
+    if(chromeAISession) return chromeAISession;
+    if(chromeAIInitPromise) return chromeAIInitPromise;
 
-    const opts={
-      ...chromeAIOptions(),
-      monitor(m){
-        m.addEventListener('downloadprogress',e=>{
-          if(onProgress) onProgress(Math.round((e.loaded||0)*100));
-        });
+    chromeAIInitPromise=(async()=>{
+      const availability=await chromeAIAvailability();
+
+      if(availability==='unavailable'){
+        const e=new Error('このPCではChrome内蔵AIを利用できません。Gemini無料枠を選んでください。');
+        e.kind='unsupported';
+        throw e;
       }
-    };
-    return await LanguageModel.create(opts);
+
+      const opts={
+        ...chromeAIOptions(),
+        monitor(m){
+          m.addEventListener('downloadprogress',e=>{
+            if(onProgress) onProgress(Math.round((e.loaded||0)*100));
+          });
+        }
+      };
+
+      const session=await LanguageModel.create(opts);
+      chromeAISession=session;
+      return session;
+    })();
+
+    try{
+      return await chromeAIInitPromise;
+    }finally{
+      chromeAIInitPromise=null;
+    }
   }
 
   async function callChromeAI(action){
-    let session;
-    try{
-      session=await createChromeAISession(p=>{
-        if(working){
-          bubbleText.innerHTML=`<span class="loading-row"><span class="spinner"></span>無料AIを準備中… ${p}%</span>`;
-        }
-      });
-      const text=await session.prompt(promptFor(action));
-      if(!text || !String(text).trim()) throw new Error('Chrome内蔵AIから文章が返りませんでした。');
-      return String(text).trim();
-    }finally{
-      try{session?.destroy()}catch{}
+    const session=await getChromeAISession(p=>{
+      if(working){
+        bubbleText.innerHTML=
+          `<span class="loading-row"><span class="spinner"></span>初回だけ無料AIを準備中… ${p}%</span>`;
+      }
+    });
+
+    // promptStreamingを使い、生成された部分からすぐ吹き出しに表示する
+    if(typeof session.promptStreaming==='function'){
+      let full='';
+      const stream=session.promptStreaming(promptFor(action));
+      for await (const chunk of stream){
+        full += String(chunk||'');
+        // ストリーミング中も文章が読めるように逐次表示
+        bubbleText.textContent=full;
+      }
+      if(!full.trim()) throw new Error('Chrome内蔵AIから文章が返りませんでした。');
+      return full.trim();
     }
+
+    const text=await session.prompt(promptFor(action));
+    if(!text || !String(text).trim()) throw new Error('Chrome内蔵AIから文章が返りませんでした。');
+    return String(text).trim();
   }
 
   async function testChromeAIConnection(){
-    let session;
-    try{
-      settingsState.textContent='Chrome内蔵AIを確認しています…';
-      session=await createChromeAISession(p=>{
-        settingsState.textContent=`Chrome内蔵AIを準備しています… ${p}%`;
-      });
-      const text=await session.prompt('日本語で「接続OK」とだけ答えてください。');
-      return String(text||'接続OK').trim();
-    }finally{
-      try{session?.destroy()}catch{}
+    const availability=await chromeAIAvailability();
+
+    if(availability==='available'){
+      settingsState.textContent='Chrome内蔵AIは準備済みです。セッションを起動しています…';
+    }else if(availability==='downloadable'){
+      settingsState.textContent='初回だけAIモデルをダウンロードします…';
+    }else if(availability==='downloading'){
+      settingsState.textContent='AIモデルのダウンロードを続けています…';
     }
+
+    const session=await getChromeAISession(p=>{
+      settingsState.textContent=`初回だけAIモデルを準備しています… ${p}%`;
+    });
+
+    const text=await session.prompt('日本語で「接続OK」とだけ答えてください。');
+    return String(text||'接続OK').trim();
+  }
+
+  async function resetChromeAISession(){
+    try{
+      chromeAISession?.destroy();
+    }catch{}
+    chromeAISession=null;
+    chromeAIInitPromise=null;
   }
 
   async function testGeminiFreeConnection(){
@@ -1274,14 +1317,25 @@ Web検索ツールが利用できない場合は、原文との比較と、あ�
       const input=state.currentText;
       working=true;
       setButtonsDisabled(true);
-      bubbleText.innerHTML=`<span class="loading-row"><span class="spinner"></span>${escapeHTML(actionName(action))}…</span>`;
+      if(currentProvider()==='chromeai' && !chromeAISession){
+        bubbleText.innerHTML=`<span class="loading-row"><span class="spinner"></span>初回だけ無料AIを準備しています…</span>`;
+      }else{
+        bubbleText.innerHTML=`<span class="loading-row"><span class="spinner"></span>${escapeHTML(actionName(action))}…</span>`;
+      }
 
       try{
         const output=await callAI(action);
         state.currentText=output;
         state.history.push({action,input,output});
         if(action!=='verify') state.lastTransformAction=action;
-        await replaceBubbleText(output);
+
+        // Chrome内蔵AIは生成中から逐次表示しているので、最後に重い差し替えをしない
+        if(currentProvider()==='chromeai'){
+          bubbleText.textContent=output;
+          bubbleText.classList.remove('swap-out','swap-in');
+        }else{
+          await replaceBubbleText(output);
+        }
       }catch(e){
         console.error(e);
         if(e.message!=='API Key未設定'){
@@ -1366,6 +1420,10 @@ Web検索ツールが利用できない場合は、原文との比較と、あ�
     }finally{
       saveSettings.disabled=false;
     }
+  });
+
+  window.addEventListener('beforeunload',()=>{
+    try{chromeAISession?.destroy()}catch{}
   });
 
   captureBtn.addEventListener('click',captureScreen);
