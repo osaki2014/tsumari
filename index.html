@@ -431,10 +431,10 @@
       </svg>
       <div id="bubbleDragHandle" class="bubble-drag-handle" title="ドラッグして吹き出しを移動"></div>
       <div class="bubble-toolbar">
-        <button class="word-btn" data-action="explain">ということは</button>
-        <button class="word-btn" data-action="analogy">いいかえると</button>
-        <button class="word-btn" data-action="summary">つまり</button>
-        <button class="word-btn" data-action="verify">ほんとうに？</button>
+        <button class="word-btn" data-action="explain" title="一部を反転選択して押すと、その部分だけを説明します">ということは</button>
+        <button class="word-btn" data-action="analogy" title="一部を反転選択して押すと、その部分だけを言いかえます">いいかえると</button>
+        <button class="word-btn" data-action="summary" title="一部を反転選択して押すと、その部分だけをまとめます">つまり</button>
+        <button class="word-btn" data-action="verify" title="選択部分を最初の原文と比較して確かめます">ほんとうに？</button>
         <button class="word-btn" data-action="understood">わかった</button>
         <button class="word-btn" data-action="confused">わからん</button>
       </div>
@@ -577,6 +577,9 @@
   let bubbleDragState = null;
   let bubbleResizeState = null;
 
+  // 吹き出し内で反転選択した文字列。ボタンを押す直前に保存する。
+  let pendingBubbleSelection = '';
+
   // API key は永続保存しない
   let openAIKey = '';
   let geminiKey = '';
@@ -623,7 +626,7 @@
     return modelSelect?.value || '';
   }
 
-  function logInteraction(kind, action, input, output, extra=''){
+  function logInteraction(kind, action, input, output, extra='', selectedText=''){
     interactionLog.push({
       session: selectionSession,
       time_iso: nowISO(),
@@ -636,6 +639,7 @@
       input: input || '',
       output: output || '',
       original_text: state.originalText || '',
+      selected_text: selectedText || '',
       extra: extra || ''
     });
     if(historyCount) historyCount.textContent=`履歴 ${interactionLog.length}件`;
@@ -662,6 +666,7 @@
       'provider_id',
       'model',
       'original_text',
+      'selected_text',
       'input',
       'output',
       'extra'
@@ -679,6 +684,7 @@
         r.provider_id,
         r.model,
         r.original_text,
+        r.selected_text,
         r.input,
         r.output,
         r.extra
@@ -1258,17 +1264,29 @@
     }[action]||action;
   }
 
-  function promptFor(action){
-    const original=state.originalText.trim();
-    const current=state.currentText.trim();
+  function getSelectedBubbleText(){
+    const sel=window.getSelection();
+    if(!sel || sel.rangeCount===0 || sel.isCollapsed) return '';
+    const range=sel.getRangeAt(0);
+    const node=range.commonAncestorContainer;
+    const el=node.nodeType===Node.ELEMENT_NODE ? node : node.parentElement;
+    if(!el || !bubbleText.contains(el)) return '';
+    return sel.toString().replace(/\s+/g,' ').trim();
+  }
 
-    // 「わかった」「わからん」は説明方法そのものではないため除外して、
-    // 直前の実質的な変換ボタンを探す。
+  function promptFor(action, selectedText=''){
+    const original=state.originalText.trim();
+    const fullCurrent=state.currentText.trim();
+    const selected=(selectedText||'').trim();
+    const current=selected || fullCurrent;
+
     const transformActions=['explain','analogy','summary','verify'];
     const lastTransform=[...state.history].reverse().find(h=>transformActions.includes(h.action));
     const previousAction=lastTransform?.action || state.lastTransformAction || 'explain';
     const previousInput=lastTransform?.input || original;
-    const previousOutput=lastTransform?.output || current;
+    const previousOutput=lastTransform?.output || fullCurrent;
+
+    const scopeNote = selected ? `\n\n【今回、読み手が反転選択した部分】\n${selected}\n\n今回はこの選択部分だけについて答えてください。選択されていない周囲の文章へ話を広げすぎないでください。` : '';
 
     const base=`あなたは、文章を丁寧に説明する先生です。
 読み手の知識量と語彙は、おおむね小学5年生までを前提にしてください。
@@ -1287,18 +1305,14 @@
     if(action==='understood'){
       return `${base}
 
-これまでのやりとりのあと、読み手が
-「わかった」
-と伝えました。
+これまでのやりとりのあと、読み手が「わかった」と伝えました。
 
 【最初の文章】
 ${original}
 
-【現在の説明】
+【現在の説明または選択部分】
 ${current}
-
-【直前に行った説明方法】
-${actionName(previousAction)}
+${scopeNote}
 
 この「わかった」への返答として、そのやりとりに合った短く丁寧な返事をしてください。
 単なる「よかったです」だけではなく、必要なら今理解できた大事な点を一言だけ確認してもかまいません。
@@ -1309,9 +1323,7 @@ ${actionName(previousAction)}
     if(action==='confused'){
       return `${base}
 
-これまでの説明を読んだあと、読み手が
-「わからん」
-と伝えました。
+これまでの説明を読んだあと、読み手が「わからん」と伝えました。
 
 【最初の文章】
 ${original}
@@ -1319,21 +1331,18 @@ ${original}
 【直前に押された説明ボタン】
 ${actionName(previousAction)}
 
-【そのボタンを押す一つ前の文章】
-${previousInput}
+【今回もう一度説明する対象】
+${selected || previousInput}
 
-【そのボタンで出した説明】
+【直前に出した説明】
 ${previousOutput}
+${selected ? `\n【読み手が分からないと示した反転選択部分】\n${selected}` : ''}
 
 まず、分かりにくい説明になったことを丁寧に短く謝ってください。
-「申し訳ありません。別の見方で説明します。」のような表現で構いません。
-
-そのあと、【そのボタンを押す一つ前の文章】に戻り、
-「${actionName(previousAction)}」という同じ目的を、
-さきほどとは違う視点・違う説明の順序・違う具体例で、もう一度実行してください。
+そのあと、「${actionName(previousAction)}」という同じ目的を、さきほどとは違う視点・違う説明の順序・違う具体例で、もう一度実行してください。
 
 重要：
-- さきほどの説明文を単に言い換えるのではなく、一つ前の文章から説明を作り直す。
+- ${selected ? '今回は反転選択された部分に焦点を当てて説明を作り直す。' : 'さきほどの説明文を単に言い換えるのではなく、一つ前の文章から説明を作り直す。'}
 - 何が難しかったかを勝手に決めつけない。
 - 語彙と前提知識は小学5年生程度までにする。
 - 丁寧な「です・ます」調にする。
@@ -1345,62 +1354,53 @@ ${previousOutput}
       return `${base}
 
 読み手が、この文章を読んで「ということは？」とたずねた場面です。
-
 質問を復唱したり、「『ということは？』ですね。」のような前置きをしてはいけません。
 返答は必ず「ということは、」から始めてください。
 
-そのあと、文章の中で省略されているつながりや、「何がどうなるのか」「なぜそうなるのか」が分かるように、丁寧に説明してください。
-単に短くするのではなく、元の文章の意味がひらけて理解しやすくなる答えにしてください。
-同じボタンがもう一度押された場合は、現在の説明を前提に、さらに一段分かりやすくしてください。
+そのあと、「何がどうなるのか」「なぜそうなるのか」が分かるように丁寧に説明してください。
+単に短くするのではなく、意味がひらけて理解しやすくなる答えにしてください。
 
-読んでいる文章：
-${current}`;
+対象の文章：
+${current}${scopeNote}`;
     }
 
     if(action==='analogy'){
       return `${base}
 
 読み手が、この文章を読んで「いいかえると？」とたずねた場面です。
-
 質問を復唱したり、「『いいかえると？』ですね。」のような前置きをしてはいけません。
 返答は必ず「いいかえると、」から始めてください。
 
-そのあと、意味を変えずに、より身近で具体的な言葉へ丁寧に言いかえてください。
-必要であれば、学校生活、家、遊び、道具、自然など、一般的に想像しやすいものを使って説明してかまいません。
-ただし、たとえを使うこと自体を目的にせず、別の言葉で自然に言い直してください。
-同じボタンがもう一度押された場合は、現在の言いかえをさらに分かりやすくしてください。
+意味を変えずに、より身近で具体的な言葉へ丁寧に言いかえてください。
+必要なら学校生活、家、遊び、道具、自然など、一般的に想像しやすいものを使ってかまいません。
 
-読んでいる文章：
-${current}`;
+対象の文章：
+${current}${scopeNote}`;
     }
 
     if(action==='summary'){
       return `${base}
 
-読み手が、この文章を読んで
-「つまり？」
-とたずねました。
+読み手が、この文章を読んで「つまり？」とたずねました。
+質問を復唱せず、返答は必ず「つまり、」から始めてください。
+大切な意味・条件を残しながら短くまとめてください。
 
-その質問への返答として、この文章で最も大切なことを残しながら、短くまとめてください。
-「つまり、〜ということです。」のような、丁寧で自然な返答にしてください。
-同じボタンがもう一度押された場合は、現在のまとめをさらに短くしながら、大切な意味は残してください。
-
-読んでいる文章：
-${current}`;
+対象の文章：
+${current}${scopeNote}`;
     }
 
     return `あなたは、文章の内容が正しいかを丁寧に確かめる先生です。
 読み手の知識量と語彙は、おおむね小学5年生までを前提にしてください。
 
-読み手が、現在表示されている説明を読んで
-「ほんとうに？」
-とたずねました。
+読み手が「ほんとうに？」とたずねました。
 
 【最初にOCRで読んだ原文】
 ${original}
 
-【現在の吹き出しの文章】
-${current}
+【現在の吹き出しの全文】
+${fullCurrent}
+
+${selected ? `【今回、検証したい反転選択部分】\n${selected}\n\n重要：この反転選択部分を新しい原文として扱ってはいけません。必ず最初にOCRで読んだ原文を基準に、この選択部分が正確かどうかを比較してください。` : ''}
 
 【その前に使われた質問】
 ${actionName(previousAction)}
@@ -1408,20 +1408,18 @@ ${actionName(previousAction)}
 【その質問をする前に表示されていた文章】
 ${previousInput}
 
-まず内部で、現在の文章が最初の原文の意味や条件からずれていないか確認してください。
+まず内部で、${selected ? '反転選択された部分' : '現在の文章'}が最初の原文の意味や条件からずれていないか確認してください。
 Web検索ツールが実際に利用できる場合だけ、必要に応じて一般的な事実や具体例も確かめてください。
 Web検索ツールが利用できない場合は、原文との比較と、あなたが持つ安定した知識の範囲で確認してください。
 検索していないのに「検索した」「調べた」とは書かないでください。
 
 そのうえで、「ほんとうに？」という問いへの返答として、丁寧な「です・ます」調で答えてください。
+${selected ? '今回は反転選択された部分についての検証結果だけを返してください。ただし判断の基準は最初の原文です。' : ''}
 
 ルール：
 - 内容が合っている場合は、「はい。〜」のように、なぜそう言えるのかを短く説明する。
 - 少し言いすぎていたり、意味がずれていた場合は、「先ほどの説明は少し正確ではありませんでした。」のように丁寧に認め、その後で正しく言い直す。
-- ずれていた場合は、「${actionName(previousAction)}」とたずねられたときの答えを、原文に忠実になるようにやり直す。
 - 「うん」「ごめん」「〜なんだよ」など、くだけた言い方は使わない。
-- 子ども扱いする表現や幼児語は使わない。
-- 難しい言葉は避け、必要な場合だけ簡単に説明する。
 - URL、出典一覧、検証手順、Markdownは出さない。
 - 吹き出しにそのまま表示できる返答本文だけを書く。`;
   }
@@ -1617,8 +1615,8 @@ Web検索ツールが利用できない場合は、原文との比較と、あ�
     return new Error(msg || `Gemini API: HTTP ${res.status}`);
   }
 
-  function promptWithVisualContext(action){
-    return `${promptFor(action)}
+  function promptWithVisualContext(action, selectedText=''){
+    return `${promptFor(action, selectedText)}
 
 【選択範囲の画像について】
 この指示には、ユーザーが実際に矩形選択した元画像も一緒に渡します。
@@ -1716,7 +1714,7 @@ OCRされた文字と元画像が食い違う場合は、元画像を優先し�
     }
   }
 
-  async function callChromeAI(action){
+  async function callChromeAI(action, selectedText=''){
     const session=await getChromeAISession(p=>{
       if(working){
         bubbleText.innerHTML=
@@ -1724,7 +1722,7 @@ OCRされた文字と元画像が食い違う場合は、元画像を優先し�
       }
     });
 
-    const promptText=promptWithVisualContext(action);
+    const promptText=promptWithVisualContext(action, selectedText);
 
     // 数式を含む可能性があるので、矩形画像そのものをAIへ渡す。
     const multimodalPrompt = hasSelectionImage()
@@ -1801,7 +1799,7 @@ OCRされた文字と元画像が食い違う場合は、元画像を優先し�
     return extractGeminiText(data);
   }
 
-  async function callGeminiFree(action){
+  async function callGeminiFree(action, selectedText=''){
     if(!geminiFreeKey){
       openSettings('Gemini Free Tier API Keyを入力してください。');
       throw new Error('API Key未設定');
@@ -1817,7 +1815,7 @@ OCRされた文字と元画像が食い違う場合は、元画像を優先し�
         contents:[{
           role:'user',
           parts:[
-            {text:promptWithVisualContext(action)},
+            {text:promptWithVisualContext(action, selectedText)},
             ...(geminiImagePart() ? [geminiImagePart()] : [])
           ]
         }],
@@ -1889,7 +1887,7 @@ OCRされた文字と元画像が食い違う場合は、元画像を優先し�
     return testOpenAIConnection();
   }
 
-  async function callOpenAI(action){
+  async function callOpenAI(action, selectedText=''){
     if(!openAIKey){
       openSettings('OpenAI API Keyを入力してください。');
       throw new Error('API Key未設定');
@@ -1902,11 +1900,11 @@ OCRされた文字と元画像が食い違う場合は、元画像を優先し�
         ? [{
             role:'user',
             content:[
-              {type:'input_text',text:promptWithVisualContext(action)},
+              {type:'input_text',text:promptWithVisualContext(action, selectedText)},
               {type:'input_image',image_url:selectedCropDataUrl,detail:'high'}
             ]
           }]
-        : promptWithVisualContext(action)
+        : promptWithVisualContext(action, selectedText)
     };
     if(action==='verify') body.tools=[{type:'web_search'}];
 
@@ -1943,7 +1941,7 @@ OCRされた文字と元画像が食い違う場合は、元画像を優先し�
     return {res,data};
   }
 
-  async function callGemini(action){
+  async function callGemini(action, selectedText=''){
     if(!geminiKey){
       openSettings('Gemini API Keyを入力してください。');
       throw new Error('API Key未設定');
@@ -1954,7 +1952,7 @@ OCRされた文字と元画像が食い違う場合は、元画像を優先し�
         contents:[{
           role:'user',
           parts:[
-            {text:promptWithVisualContext(action)},
+            {text:promptWithVisualContext(action, selectedText)},
             ...(geminiImagePart() ? [geminiImagePart()] : [])
           ]
         }],
@@ -1987,12 +1985,12 @@ OCRされた文字と元画像が食い違う場合は、元画像を優先し�
     return extractGeminiText(data);
   }
 
-  async function callAI(action){
+  async function callAI(action, selectedText=''){
     const p=currentProvider();
-    if(p==='chromeai') return callChromeAI(action);
-    if(p==='gemini-free') return callGeminiFree(action);
-    if(p==='gemini') return callGemini(action);
-    return callOpenAI(action);
+    if(p==='chromeai') return callChromeAI(action, selectedText);
+    if(p==='gemini-free') return callGeminiFree(action, selectedText);
+    if(p==='gemini') return callGemini(action, selectedText);
+    return callOpenAI(action, selectedText);
   }
 
   function extractOpenAIText(data){
@@ -2026,11 +2024,18 @@ OCRされた文字と元画像が食い違う場合は、元画像を優先し�
   }
 
   actionButtons.forEach(btn=>{
+    // ボタンを押すとテキスト選択が消えることがあるため、pointerdownで先に保存する。
+    btn.addEventListener('pointerdown',()=>{
+      pendingBubbleSelection=getSelectedBubbleText();
+    });
+
     btn.addEventListener('click',async()=>{
       const action=btn.dataset.action;
       if(working || !state.currentText) return;
 
-      const input=state.currentText;
+      const selectedText=(pendingBubbleSelection || getSelectedBubbleText()).trim();
+      pendingBubbleSelection='';
+      const input=selectedText || state.currentText;
       working=true;
       setButtonsDisabled(true);
       if(currentProvider()==='chromeai' && !chromeAISession){
@@ -2040,7 +2045,7 @@ OCRされた文字と元画像が食い違う場合は、元画像を優先し�
       }
 
       try{
-        const output=await callAI(action);
+        const output=await callAI(action, selectedText);
         state.currentText=output;
         state.history.push({
           action,
@@ -2057,7 +2062,7 @@ OCRされた文字と元画像が食い違う場合は、元画像を優先し�
           state.lastTransformAction=action;
         }
 
-        logInteraction('ai',actionName(action),input,output,'');
+        logInteraction('ai',actionName(action),input,output,selectedText ? '吹き出し内の反転選択部分のみを対象' : '',selectedText);
 
         // Chrome内蔵AIは生成中から逐次表示しているので、最後に重い差し替えをしない
         if(currentProvider()==='chromeai'){
