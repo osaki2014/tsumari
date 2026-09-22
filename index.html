@@ -1,0 +1,1176 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ことばをひらく</title>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<style>
+  :root{
+    --bg:#f6f6f3;
+    --ink:#111;
+    --paper:#fff;
+    --line:#111;
+    --muted:#777;
+    --blue:#2563eb;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;min-height:100%;background:var(--bg);color:var(--ink)}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic UI",
+    "Yu Gothic",Meiryo,sans-serif;
+    overflow-x:hidden;
+  }
+
+  /* 最小限のヘッダー */
+  header{
+    height:58px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:0 18px;
+    background:rgba(246,246,243,.94);
+    border-bottom:1px solid #ddd;
+    position:sticky;
+    top:0;
+    z-index:50;
+    backdrop-filter:blur(10px);
+  }
+  .brand{
+    font-size:17px;
+    font-weight:800;
+    letter-spacing:-.02em;
+  }
+  .header-actions{display:flex;align-items:center;gap:8px}
+  .icon-btn,.capture-btn{
+    border:1.5px solid #111;
+    background:#fff;
+    color:#111;
+    border-radius:999px;
+    height:36px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    font-weight:800;
+  }
+  .icon-btn{width:36px;font-size:17px}
+  .capture-btn{padding:0 15px;font-size:13px}
+  .capture-btn:hover,.icon-btn:hover{background:#111;color:#fff}
+
+  /* メインはほぼキャプチャだけ */
+  main{padding:14px}
+  .workspace{
+    width:min(1500px,100%);
+    height:calc(100vh - 86px);
+    min-height:520px;
+    margin:0 auto;
+    background:#161616;
+    border-radius:18px;
+    overflow:hidden;
+    position:relative;
+    box-shadow:0 12px 36px rgba(0,0,0,.10);
+  }
+  #screenCanvas{
+    display:block;
+    width:100%;
+    height:100%;
+    object-fit:contain;
+    cursor:crosshair;
+    touch-action:none;
+  }
+  .empty{
+    position:absolute;inset:0;
+    display:grid;place-items:center;
+    color:#ddd;
+    text-align:center;
+    line-height:1.9;
+    padding:30px;
+    pointer-events:none;
+  }
+  .empty strong{color:#fff;font-size:18px}
+  .hint{
+    position:absolute;
+    left:14px;bottom:14px;
+    background:rgba(0,0,0,.72);
+    color:#fff;
+    border-radius:999px;
+    padding:8px 12px;
+    font-size:12px;
+    pointer-events:none;
+  }
+  .hidden{display:none!important}
+
+  /* 漫画吹き出し */
+  .bubble{
+    position:absolute;
+    z-index:20;
+    width:min(430px,calc(100% - 28px));
+    max-height:min(460px,calc(100% - 28px));
+    background:#fff;
+    color:#111;
+    border:2px solid #111;
+    border-radius:24px;
+    box-shadow:8px 9px 0 rgba(0,0,0,.22);
+    padding:13px 14px 16px;
+    opacity:0;
+    transform:translateY(10px) scale(.97);
+    transition:opacity .2s ease, transform .25s cubic-bezier(.2,.8,.2,1),
+               left .18s ease, top .18s ease;
+  }
+  .bubble.show{opacity:1;transform:translateY(0) scale(1)}
+  .bubble::before{
+    content:"";
+    position:absolute;
+    width:22px;height:22px;
+    background:#fff;
+    border-left:2px solid #111;
+    border-bottom:2px solid #111;
+    transform:rotate(45deg);
+    left:-12px;
+    top:42px;
+  }
+  .bubble.left::before{
+    left:auto;
+    right:-12px;
+    border-left:0;
+    border-bottom:0;
+    border-right:2px solid #111;
+    border-top:2px solid #111;
+  }
+  .bubble.bottom::before{
+    left:42px;
+    right:auto;
+    top:-12px;
+    border-left:2px solid #111;
+    border-bottom:0;
+    border-top:2px solid #111;
+    border-right:0;
+  }
+
+  .bubble-toolbar{
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
+    padding-bottom:10px;
+    margin-bottom:10px;
+    border-bottom:1px solid #ddd;
+  }
+  .word-btn{
+    appearance:none;
+    background:#fff;
+    color:#111;
+    border:1.5px solid #111;
+    border-radius:999px;
+    padding:7px 10px;
+    font:inherit;
+    font-size:12px;
+    font-weight:800;
+    cursor:pointer;
+    white-space:nowrap;
+    transition:transform .12s ease,background .12s ease,color .12s ease;
+  }
+  .word-btn:hover:not(:disabled){background:#111;color:#fff;transform:translateY(-1px)}
+  .word-btn:disabled{opacity:.35;cursor:not-allowed}
+
+  .bubble-body{
+    overflow:auto;
+    max-height:350px;
+    scrollbar-width:thin;
+  }
+  .bubble-text{
+    font-size:17px;
+    line-height:1.8;
+    white-space:pre-wrap;
+    overflow-wrap:anywhere;
+    min-height:48px;
+  }
+  .bubble-text.swap-out{animation:swapOut .18s ease forwards}
+  .bubble-text.swap-in{animation:swapIn .34s cubic-bezier(.2,.8,.2,1) both}
+  @keyframes swapOut{
+    to{opacity:0;transform:translateY(-7px);filter:blur(4px)}
+  }
+  @keyframes swapIn{
+    from{opacity:0;transform:translateY(9px);filter:blur(4px)}
+    to{opacity:1;transform:none;filter:none}
+  }
+  .loading-row{
+    display:inline-flex;align-items:center;gap:8px;color:#555;font-size:14px
+  }
+  .spinner{
+    width:15px;height:15px;border-radius:50%;
+    border:2px solid #ccc;border-top-color:#111;
+    animation:spin .75s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* 設定モーダル */
+  .modal-back{
+    position:fixed;inset:0;
+    background:rgba(0,0,0,.28);
+    z-index:100;
+    display:grid;
+    place-items:center;
+    padding:18px;
+  }
+  .modal{
+    width:min(520px,100%);
+    max-height:90vh;
+    overflow:auto;
+    background:#fff;
+    border:2px solid #111;
+    border-radius:22px;
+    box-shadow:10px 12px 0 rgba(0,0,0,.22);
+    padding:18px;
+  }
+  .modal-head{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    margin-bottom:16px;
+  }
+  .modal h2{margin:0;font-size:19px}
+  .close-btn{
+    width:32px;height:32px;border:1.5px solid #111;border-radius:50%;
+    background:#fff;font-size:18px;cursor:pointer
+  }
+  .field{margin:13px 0}
+  .field label{display:block;font-size:12px;font-weight:800;margin-bottom:6px}
+  .field input,.field select{
+    width:100%;
+    padding:11px 12px;
+    border:1.5px solid #111;
+    border-radius:10px;
+    font:inherit;
+    background:#fff;
+  }
+  .key-wrap{display:flex;gap:7px}
+  .key-wrap input{flex:1}
+  .mini-btn{
+    border:1.5px solid #111;background:#fff;border-radius:10px;
+    padding:0 12px;font-weight:800;cursor:pointer
+  }
+  .save-btn{
+    width:100%;border:0;background:#111;color:#fff;
+    border-radius:12px;padding:12px;font:inherit;font-weight:800;cursor:pointer
+  }
+  .test{
+    font-size:12px;min-height:18px;margin-top:8px;color:#555
+  }
+  .help{
+    margin-top:17px;padding-top:15px;border-top:1px solid #ddd;
+    font-size:13px;line-height:1.75;color:#444
+  }
+  .help ol{padding-left:20px;margin:8px 0}
+  .help a{color:#111;font-weight:800}
+  .warning{
+    margin-top:12px;
+    padding:10px 11px;
+    border:1px solid #bbb;
+    border-radius:11px;
+    background:#f7f7f5;
+    font-size:11px;
+    line-height:1.65;
+    color:#555;
+  }
+  .status-dot{
+    display:inline-block;width:8px;height:8px;border-radius:50%;
+    background:#bbb;margin-right:5px
+  }
+  .status-dot.ok{background:#16835d}
+
+  @media(max-width:760px){
+    main{padding:8px}
+    .workspace{height:calc(100vh - 74px);border-radius:12px}
+    .bubble{width:min(360px,calc(100% - 18px));padding:11px}
+    .bubble-text{font-size:15px}
+    .word-btn{font-size:11px;padding:6px 8px}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">ことばをひらく</div>
+  <div class="header-actions">
+    <button id="captureBtn" class="capture-btn">画面を取り込む</button>
+    <button id="settingsBtn" class="icon-btn" aria-label="設定" title="設定">⚙</button>
+  </div>
+</header>
+
+<main>
+  <section id="workspace" class="workspace">
+    <canvas id="screenCanvas"></canvas>
+    <div id="empty" class="empty">
+      <div><strong>画面を取り込む</strong><br>画面・ウィンドウ・タブを選び、文章をドラッグで囲んでください。</div>
+    </div>
+    <div id="hint" class="hint hidden">文章のある場所をドラッグ</div>
+
+    <div id="bubble" class="bubble hidden">
+      <div class="bubble-toolbar">
+        <button class="word-btn" data-action="explain">ということは</button>
+        <button class="word-btn" data-action="analogy">いいかえると</button>
+        <button class="word-btn" data-action="summary">つまり</button>
+        <button class="word-btn" data-action="verify">ほんとうに？</button>
+      </div>
+      <div class="bubble-body">
+        <div id="bubbleText" class="bubble-text"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="settingsModal" class="modal-back hidden" role="dialog" aria-modal="true">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="settingsTitle">AI 設定</h2>
+      <button id="closeSettings" class="close-btn" aria-label="閉じる">×</button>
+    </div>
+
+    <div class="field">
+      <label for="provider">AI</label>
+      <select id="provider">
+        <option value="gemini">Gemini</option>
+        <option value="openai">OpenAI</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label id="apiKeyLabel" for="apiKey">Gemini API Key</label>
+      <div class="key-wrap">
+        <input id="apiKey" type="password" autocomplete="off" placeholder="Google AI Studio のキーを貼り付け">
+        <button id="toggleKey" class="mini-btn" type="button">表示</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="model">モデル</label>
+      <select id="model"></select>
+    </div>
+
+    <div id="searchGroundingField" class="field">
+      <label>「ほんとうに？」のWeb確認</label>
+      <label style="display:flex;align-items:flex-start;gap:8px;font-weight:500;line-height:1.5">
+        <input id="useSearchGrounding" type="checkbox" style="width:auto;margin-top:3px">
+        <span>Google検索も使う <small style="display:block;color:#777;margin-top:3px">Geminiの有料API枠向けです。無料枠ではOFFのまま使ってください。</small></span>
+      </label>
+    </div>
+
+    <button id="saveSettings" class="save-btn">このタブで使う・接続テスト</button>
+    <div id="settingsState" class="test"></div>
+
+    <div id="providerHelp" class="help"></div>
+
+    <div class="warning">
+      <b>キーはこのHTMLやGitHubには保存しません。</b><br>
+      入力したキーは、このページを開いている間だけブラウザのメモリに保持します。
+      再読み込みすると消えます。公開サービスで多数の人に使わせる場合は、
+      APIキーをブラウザに置かず、サーバー側へ移す構成を推奨します。
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  const $ = s => document.querySelector(s);
+  const $$ = s => [...document.querySelectorAll(s)];
+
+  const workspace = $('#workspace');
+  const canvas = $('#screenCanvas');
+  const ctx = canvas.getContext('2d');
+  const empty = $('#empty');
+  const hint = $('#hint');
+  const captureBtn = $('#captureBtn');
+
+  const bubble = $('#bubble');
+  const bubbleText = $('#bubbleText');
+  const actionButtons = $$('.word-btn');
+
+  const settingsBtn = $('#settingsBtn');
+  const modal = $('#settingsModal');
+  const closeSettings = $('#closeSettings');
+  const providerSelect = $('#provider');
+  const settingsTitle = $('#settingsTitle');
+  const apiKeyLabel = $('#apiKeyLabel');
+  const apiKeyInput = $('#apiKey');
+  const modelSelect = $('#model');
+  const saveSettings = $('#saveSettings');
+  const settingsState = $('#settingsState');
+  const toggleKey = $('#toggleKey');
+  const providerHelp = $('#providerHelp');
+  const searchGroundingField = $('#searchGroundingField');
+  const useSearchGrounding = $('#useSearchGrounding');
+
+  let baseImage = null;
+  let dragging = false;
+  let dragStart = null;
+  let selection = null;
+  let working = false;
+
+  // API key は永続保存しない
+  let openAIKey = '';
+  let geminiKey = '';
+
+  let state = freshState();
+
+  function freshState(){
+    return {
+      originalText:'',
+      currentText:'',
+      history:[],
+      lastTransformAction:null
+    };
+  }
+
+  function resetState(){
+    state = freshState();
+    bubbleText.textContent = '';
+  }
+
+  function setButtonsDisabled(v){
+    actionButtons.forEach(b => b.disabled = v);
+  }
+
+  function canvasPoint(ev){
+    const r = canvas.getBoundingClientRect();
+    return {
+      x:(ev.clientX-r.left) * canvas.width / r.width,
+      y:(ev.clientY-r.top) * canvas.height / r.height
+    };
+  }
+
+  function draw(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    if(!baseImage) return;
+
+    ctx.drawImage(baseImage,0,0,canvas.width,canvas.height);
+
+    if(selection){
+      const {x,y,w,h}=selection;
+      ctx.save();
+      ctx.fillStyle='rgba(0,0,0,.28)';
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+      ctx.clearRect(x,y,w,h);
+      ctx.drawImage(baseImage,x,y,w,h,x,y,w,h);
+      ctx.strokeStyle='#fff';
+      ctx.lineWidth=Math.max(2,canvas.width/800);
+      ctx.setLineDash([12,8]);
+      ctx.strokeRect(x,y,w,h);
+      ctx.restore();
+    }
+  }
+
+  async function captureScreen(){
+    try{
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video:{frameRate:1},
+        audio:false
+      });
+      const video=document.createElement('video');
+      video.srcObject=stream;
+      video.muted=true;
+      await video.play();
+      await new Promise(r=>setTimeout(r,250));
+
+      const tmp=document.createElement('canvas');
+      tmp.width=video.videoWidth;
+      tmp.height=video.videoHeight;
+      tmp.getContext('2d').drawImage(video,0,0);
+      stream.getTracks().forEach(t=>t.stop());
+
+      const img=new Image();
+      img.onload=()=>{
+        baseImage=img;
+        canvas.width=img.width;
+        canvas.height=img.height;
+        selection=null;
+        resetState();
+        bubble.classList.add('hidden');
+        bubble.classList.remove('show');
+        empty.classList.add('hidden');
+        hint.classList.remove('hidden');
+        draw();
+      };
+      img.src=tmp.toDataURL('image/png');
+    }catch(e){
+      console.error(e);
+      alert('画面の取り込みがキャンセルされたか、ブラウザが対応していません。Chrome / Edgeでお試しください。');
+    }
+  }
+
+  canvas.addEventListener('pointerdown',ev=>{
+    if(!baseImage || working) return;
+    dragging=true;
+    dragStart=canvasPoint(ev);
+    selection={x:dragStart.x,y:dragStart.y,w:0,h:0};
+    bubble.classList.remove('show');
+    setTimeout(()=>bubble.classList.add('hidden'),120);
+    canvas.setPointerCapture(ev.pointerId);
+  });
+
+  canvas.addEventListener('pointermove',ev=>{
+    if(!dragging || !dragStart) return;
+    const p=canvasPoint(ev);
+    selection={
+      x:Math.min(dragStart.x,p.x),
+      y:Math.min(dragStart.y,p.y),
+      w:Math.abs(p.x-dragStart.x),
+      h:Math.abs(p.y-dragStart.y)
+    };
+    draw();
+  });
+
+  canvas.addEventListener('pointerup',async ()=>{
+    if(!dragging) return;
+    dragging=false;
+    if(!selection || selection.w<24 || selection.h<18){
+      selection=null;
+      draw();
+      return;
+    }
+
+    // 新しい矩形で完全リセット
+    resetState();
+    hint.classList.add('hidden');
+    draw();
+    showBubbleLoading('文字を読み取っています…');
+    await runOCR();
+  });
+
+  function makeCrop(){
+    const {x,y,w,h}=selection;
+    const crop=document.createElement('canvas');
+
+    // 小さい文字のOCR精度を少し上げるため拡大
+    const scale = Math.min(2, Math.max(1, 1400/Math.max(w,1)));
+    crop.width=Math.max(1,Math.round(w*scale));
+    crop.height=Math.max(1,Math.round(h*scale));
+    const c=crop.getContext('2d');
+    c.imageSmoothingEnabled=true;
+    c.imageSmoothingQuality='high';
+    c.drawImage(baseImage,x,y,w,h,0,0,crop.width,crop.height);
+    return crop;
+  }
+
+  async function runOCR(){
+    working=true;
+    setButtonsDisabled(true);
+    try{
+      const crop=makeCrop();
+      const out=await Tesseract.recognize(crop,'jpn+eng');
+      const text=(out.data.text||'')
+        .replace(/[ \t]+\n/g,'\n')
+        .replace(/\n{3,}/g,'\n\n')
+        .trim();
+
+      state.originalText=text;
+      state.currentText=text;
+
+      if(text){
+        await replaceBubbleText(text);
+      }else{
+        await replaceBubbleText('文字をうまく読み取れませんでした。もう一度、文字の周りを少し広めに囲んでください。');
+      }
+    }catch(e){
+      console.error(e);
+      await replaceBubbleText('OCRに失敗しました。ネット接続を確認してください。');
+    }finally{
+      working=false;
+      setButtonsDisabled(!state.originalText);
+    }
+  }
+
+  function showBubbleLoading(message){
+    positionBubble();
+    bubble.classList.remove('hidden');
+    requestAnimationFrame(()=>bubble.classList.add('show'));
+    bubbleText.innerHTML=`<span class="loading-row"><span class="spinner"></span>${escapeHTML(message)}</span>`;
+    setButtonsDisabled(true);
+  }
+
+  async function replaceBubbleText(text){
+    bubbleText.classList.remove('swap-in');
+    bubbleText.classList.add('swap-out');
+    await wait(170);
+    bubbleText.textContent=text;
+    bubbleText.classList.remove('swap-out');
+    void bubbleText.offsetWidth;
+    bubbleText.classList.add('swap-in');
+    await wait(340);
+    bubbleText.classList.remove('swap-in');
+  }
+
+  function wait(ms){return new Promise(r=>setTimeout(r,ms))}
+
+  function positionBubble(){
+    if(!selection) return;
+
+    const wr=workspace.getBoundingClientRect();
+    const cr=canvas.getBoundingClientRect();
+
+    const sx=cr.width/canvas.width;
+    const sy=cr.height/canvas.height;
+
+    const selLeft=(cr.left-wr.left)+selection.x*sx;
+    const selTop=(cr.top-wr.top)+selection.y*sy;
+    const selRight=selLeft+selection.w*sx;
+    const selBottom=selTop+selection.h*sy;
+
+    const gap=18;
+    const margin=14;
+    const bw=Math.min(430,wr.width-28);
+    const estimatedH=Math.min(330,wr.height-28);
+
+    bubble.classList.remove('left','bottom');
+
+    let left=selRight+gap;
+    let top=Math.max(margin,Math.min(selTop,wr.height-estimatedH-margin));
+
+    if(left+bw>wr.width-margin){
+      left=selLeft-bw-gap;
+      bubble.classList.add('left');
+    }
+
+    if(left<margin){
+      left=Math.max(margin,Math.min(selLeft,wr.width-bw-margin));
+      top=Math.min(wr.height-estimatedH-margin,selBottom+gap);
+      bubble.classList.remove('left');
+      bubble.classList.add('bottom');
+    }
+
+    bubble.style.left=Math.round(left)+'px';
+    bubble.style.top=Math.round(Math.max(margin,top))+'px';
+  }
+
+  window.addEventListener('resize',()=>{
+    if(!bubble.classList.contains('hidden')) positionBubble();
+  });
+
+  function escapeHTML(s){
+    return String(s).replace(/[&<>"']/g,c=>({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[c]));
+  }
+
+  function actionName(action){
+    return {
+      explain:'ということは',
+      analogy:'いいかえると',
+      summary:'つまり',
+      verify:'ほんとうに？'
+    }[action]||action;
+  }
+
+  function promptFor(action){
+    const original=state.originalText.trim();
+    const current=state.currentText.trim();
+
+    const lastTransform=[...state.history].reverse().find(h=>h.action!=='verify');
+    const previousAction=lastTransform?.action || state.lastTransformAction || 'explain';
+    const previousInput=lastTransform?.input || original;
+
+    const base=`あなたは、文章を丁寧に説明する先生です。
+読み手の知識量と語彙は、おおむね小学5年生までを前提にしてください。
+
+大切なルール：
+- 言葉遣いは、丁寧で落ち着いた「です・ます」調にする。
+- 子ども扱いする話し方、幼児語、くだけすぎた言い方は使わない。
+- 難しい専門語や抽象語はできるだけ避ける。
+- 必要な専門語を使う場合は、その場で短く意味を説明する。
+- 元の文章にない事実を勝手に追加しない。
+- 元の意味や大切な条件は変えない。
+- 「小学5年生向けに説明します」などの前置きは不要。
+- Markdown、見出し、箇条書きは原則使わない。
+- 吹き出しにそのまま表示できる、自然で簡潔な返答本文だけを書く。`;
+
+    if(action==='explain'){
+      return `${base}
+
+読み手が、この文章を読んで
+「ということは？」
+とたずねました。
+
+その質問への返答として、文章の中で省略されているつながりや、「何がどうなるのか」「なぜそうなるのか」が分かるように、丁寧に説明してください。
+単に短くするのではなく、元の文章の意味がひらけて理解しやすくなる答えにしてください。
+同じボタンがもう一度押された場合は、現在の説明を前提に、さらに一段分かりやすくしてください。
+
+読んでいる文章：
+${current}`;
+    }
+
+    if(action==='analogy'){
+      return `${base}
+
+読み手が、この文章を読んで
+「いいかえると？」
+とたずねました。
+
+その質問への返答として、意味を変えずに、より身近で具体的な言葉へ丁寧に言いかえてください。
+必要であれば、学校生活、家、遊び、道具、自然など、一般的に想像しやすいものを使って説明してかまいません。
+ただし、たとえを使うこと自体を目的にせず、「別の言葉で表すと、こういうことです」と分かる説明にしてください。
+同じボタンがもう一度押された場合は、現在の言いかえをさらに分かりやすくしてください。
+
+読んでいる文章：
+${current}`;
+    }
+
+    if(action==='summary'){
+      return `${base}
+
+読み手が、この文章を読んで
+「つまり？」
+とたずねました。
+
+その質問への返答として、この文章で最も大切なことを残しながら、短くまとめてください。
+「つまり、〜ということです。」のような、丁寧で自然な返答にしてください。
+同じボタンがもう一度押された場合は、現在のまとめをさらに短くしながら、大切な意味は残してください。
+
+読んでいる文章：
+${current}`;
+    }
+
+    return `あなたは、文章の内容が正しいかを丁寧に確かめる先生です。
+読み手の知識量と語彙は、おおむね小学5年生までを前提にしてください。
+
+読み手が、現在表示されている説明を読んで
+「ほんとうに？」
+とたずねました。
+
+【最初にOCRで読んだ原文】
+${original}
+
+【現在の吹き出しの文章】
+${current}
+
+【その前に使われた質問】
+${actionName(previousAction)}
+
+【その質問をする前に表示されていた文章】
+${previousInput}
+
+まず内部で、現在の文章が最初の原文の意味や条件からずれていないか確認してください。
+Web検索ツールが実際に利用できる場合だけ、必要に応じて一般的な事実や具体例も確かめてください。
+Web検索ツールが利用できない場合は、原文との比較と、あなたが持つ安定した知識の範囲で確認してください。
+検索していないのに「検索した」「調べた」とは書かないでください。
+
+そのうえで、「ほんとうに？」という問いへの返答として、丁寧な「です・ます」調で答えてください。
+
+ルール：
+- 内容が合っている場合は、「はい。〜」のように、なぜそう言えるのかを短く説明する。
+- 少し言いすぎていたり、意味がずれていた場合は、「先ほどの説明は少し正確ではありませんでした。」のように丁寧に認め、その後で正しく言い直す。
+- ずれていた場合は、「${actionName(previousAction)}」とたずねられたときの答えを、原文に忠実になるようにやり直す。
+- 「うん」「ごめん」「〜なんだよ」など、くだけた言い方は使わない。
+- 子ども扱いする表現や幼児語は使わない。
+- 難しい言葉は避け、必要な場合だけ簡単に説明する。
+- URL、出典一覧、検証手順、Markdownは出さない。
+- 吹き出しにそのまま表示できる返答本文だけを書く。`;
+  }
+
+  const providerModels = {
+    gemini: [
+      ['gemini-3.6-flash','Gemini 3.6 Flash（おすすめ）'],
+      ['gemini-3.5-flash-lite','Gemini 3.5 Flash-Lite（軽量）'],
+      ['gemini-2.5-flash','Gemini 2.5 Flash']
+    ],
+    openai: [
+      ['gpt-5.6-luna','GPT-5.6 Luna（軽量）'],
+      ['gpt-5.6-terra','GPT-5.6 Terra'],
+      ['gpt-5.6-sol','GPT-5.6 Sol']
+    ]
+  };
+
+  function currentProvider(){
+    return providerSelect.value;
+  }
+
+  function currentKey(){
+    return currentProvider()==='gemini' ? geminiKey : openAIKey;
+  }
+
+  function setCurrentKey(key){
+    if(currentProvider()==='gemini') geminiKey=key;
+    else openAIKey=key;
+  }
+
+  function syncProviderUI(){
+    const p=currentProvider();
+    modelSelect.innerHTML=providerModels[p]
+      .map(([value,label])=>`<option value="${value}">${label}</option>`)
+      .join('');
+
+    settingsTitle.textContent = p==='gemini' ? 'Gemini 設定' : 'OpenAI 設定';
+    apiKeyLabel.textContent = p==='gemini' ? 'Gemini API Key' : 'OpenAI API Key';
+    apiKeyInput.value='';
+    apiKeyInput.type='password';
+    toggleKey.textContent='表示';
+
+    const configured=!!currentKey();
+    apiKeyInput.placeholder = configured
+      ? '設定済み（変更する場合だけ貼り付け）'
+      : (p==='gemini' ? 'Google AI Studio のキーを貼り付け' : 'sk-...');
+
+    if(p==='gemini'){
+      providerHelp.innerHTML=`
+        <b>Gemini API Keyの作り方</b>
+        <ol>
+          <li>Google AI Studio の <b>API Keys</b> を開きます。</li>
+          <li>Googleアカウントでログインします。</li>
+          <li>表示済みのキーをコピーするか、<b>Create API key</b> で作成します。</li>
+          <li>上の欄へ貼り付けて「このタブで使う・接続テスト」を押します。</li>
+        </ol>
+        <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio の API Keys を開く ↗</a>
+        <div class="warning" style="margin-top:10px">
+          Gemini APIにはプロジェクトやモデルに応じた無料枠があります。
+          通常の文章生成は無料枠で使える場合がありますが、Google検索によるグラウンディングは無料API枠では利用できません。
+          このアプリでは「ほんとうに？」も検索OFFなら無料枠の通常生成として動作します。
+        </div>`;
+    }else{
+      providerHelp.innerHTML=`
+        <b>OpenAI API Keyの作り方</b>
+        <ol>
+          <li>OpenAI Platform の <b>API Keys</b> を開きます。</li>
+          <li>使うProjectを選び、<b>Create new secret key</b> を押します。</li>
+          <li>表示されたキーをコピーします。</li>
+          <li>上の欄へ貼り付けて「このタブで使う・接続テスト」を押します。</li>
+        </ol>
+        <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">OpenAI API Keys を開く ↗</a>
+        <div class="warning" style="margin-top:10px">
+          ChatGPT Plus / Pro とOpenAI APIの料金は別です。
+          <br><a href="https://platform.openai.com/settings/organization/billing/" target="_blank" rel="noopener noreferrer">OpenAI APIの請求・残高を確認する ↗</a>
+        </div>`;
+    }
+
+    searchGroundingField.classList.toggle('hidden', p!=='gemini');
+    settingsState.textContent = configured ? 'このタブには、このAIのキーが設定済みです。' : '';
+  }
+
+  function friendlyOpenAIError(res, data){
+    const msg = data?.error?.message || '';
+    const code = data?.error?.code || '';
+    const type = data?.error?.type || '';
+
+    if(
+      code === 'credit_balance_exhausted' ||
+      type === 'insufficient_quota' ||
+      /no credits remaining|credit balance|insufficient quota/i.test(msg)
+    ){
+      const e = new Error(
+        'OpenAI APIの残高がありません。ChatGPT Plus/Proとは別に、OpenAI PlatformのBillingでAPIクレジットが必要です。'
+      );
+      e.kind='billing';
+      return e;
+    }
+    if(res.status===401){
+      const e=new Error('OpenAI API Keyが認証されませんでした。キーを確認してください。');
+      e.kind='auth'; return e;
+    }
+    if(res.status===429){
+      const e=new Error('OpenAI APIから429が返りました。残高、利用上限、レート制限を確認してください。');
+      e.kind='rate'; return e;
+    }
+    return new Error(msg || `OpenAI API: HTTP ${res.status}`);
+  }
+
+  function friendlyGeminiError(res,data){
+    const msg =
+      data?.error?.message ||
+      data?.message ||
+      '';
+
+    if(res.status===400 && /api key|key/i.test(msg)){
+      const e=new Error('Gemini API Keyが正しくないか、このGemini APIで使えないキーです。Google AI Studioで作成したキーを確認してください。');
+      e.kind='auth'; return e;
+    }
+    if(res.status===401 || res.status===403){
+      const e=new Error('Gemini APIへの認証または権限で拒否されました。Google AI StudioのAPI Keyとプロジェクト設定を確認してください。');
+      e.kind='auth'; return e;
+    }
+    if(res.status===429){
+      const e=new Error('Gemini APIの利用上限に達した可能性があります。Google AI StudioのUsage / Rate limitsを確認してください。');
+      e.kind='rate'; return e;
+    }
+    return new Error(msg || `Gemini API: HTTP ${res.status}`);
+  }
+
+  async function testOpenAIConnection(){
+    if(!openAIKey) throw new Error('OpenAI API Keyを入力してください。');
+    const body={
+      model:modelSelect.value,
+      reasoning:{effort:'low'},
+      input:'接続確認です。「接続OK」とだけ返してください。'
+    };
+    const res=await fetch('https://api.openai.com/v1/responses',{
+      method:'POST',
+      headers:{
+        'Authorization':`Bearer ${openAIKey}`,
+        'Content-Type':'application/json'
+      },
+      body:JSON.stringify(body)
+    });
+    const raw=await res.text();
+    let data;
+    try{data=JSON.parse(raw)}catch{data={error:{message:raw}}}
+    if(!res.ok) throw friendlyOpenAIError(res,data);
+    return extractOpenAIText(data);
+  }
+
+  async function testGeminiConnection(){
+    if(!geminiKey) throw new Error('Gemini API Keyを入力してください。');
+
+    const url=`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelSelect.value)}:generateContent`;
+    const res=await fetch(url,{
+      method:'POST',
+      headers:{
+        'x-goog-api-key':geminiKey,
+        'Content-Type':'application/json'
+      },
+      body:JSON.stringify({
+        contents:[{
+          role:'user',
+          parts:[{text:'接続確認です。「接続OK」とだけ返してください。'}]
+        }],
+        generationConfig:{
+          temperature:0
+        }
+      })
+    });
+
+    const raw=await res.text();
+    let data;
+    try{data=JSON.parse(raw)}catch{data={error:{message:raw}}}
+    if(!res.ok) throw friendlyGeminiError(res,data);
+    return extractGeminiText(data);
+  }
+
+  async function testAIConnection(){
+    return currentProvider()==='gemini'
+      ? testGeminiConnection()
+      : testOpenAIConnection();
+  }
+
+  async function callOpenAI(action){
+    if(!openAIKey){
+      openSettings('OpenAI API Keyを入力してください。');
+      throw new Error('API Key未設定');
+    }
+
+    const body={
+      model:modelSelect.value,
+      reasoning:{effort:'low'},
+      input:promptFor(action)
+    };
+    if(action==='verify') body.tools=[{type:'web_search'}];
+
+    const res=await fetch('https://api.openai.com/v1/responses',{
+      method:'POST',
+      headers:{
+        'Authorization':`Bearer ${openAIKey}`,
+        'Content-Type':'application/json'
+      },
+      body:JSON.stringify(body)
+    });
+
+    const raw=await res.text();
+    let data;
+    try{data=JSON.parse(raw)}catch{data={error:{message:raw}}}
+    if(!res.ok) throw friendlyOpenAIError(res,data);
+    return extractOpenAIText(data);
+  }
+
+  async function geminiRequest(body){
+    const url=`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelSelect.value)}:generateContent`;
+    const res=await fetch(url,{
+      method:'POST',
+      headers:{
+        'x-goog-api-key':geminiKey,
+        'Content-Type':'application/json'
+      },
+      body:JSON.stringify(body)
+    });
+
+    const raw=await res.text();
+    let data;
+    try{data=JSON.parse(raw)}catch{data={error:{message:raw}}}
+    return {res,data};
+  }
+
+  async function callGemini(action){
+    if(!geminiKey){
+      openSettings('Gemini API Keyを入力してください。');
+      throw new Error('API Key未設定');
+    }
+
+    const makeBody=(withSearch=false)=>{
+      const body={
+        contents:[{
+          role:'user',
+          parts:[{text:promptFor(action)}]
+        }],
+        generationConfig:{
+          temperature: action==='verify' ? 0.1 : 0.35
+        }
+      };
+
+      // Gemini無料枠ではGoogle Search groundingが使えないため、
+      // 明示的にONにされた場合だけ検索を付ける。
+      if(action==='verify' && withSearch){
+        body.tools=[{google_search:{}}];
+      }
+      return body;
+    };
+
+    const wantSearch = action==='verify' && !!useSearchGrounding.checked;
+
+    // まず指定どおり実行
+    let {res,data}=await geminiRequest(makeBody(wantSearch));
+
+    // Google検索付きで429になった場合は、
+    // 検索なしの「原文との比較・知識による確認」に自動フォールバックする。
+    if(wantSearch && res.status===429){
+      console.warn('Gemini Google Search grounding returned 429. Retrying without search grounding.');
+      ({res,data}=await geminiRequest(makeBody(false)));
+    }
+
+    if(!res.ok) throw friendlyGeminiError(res,data);
+    return extractGeminiText(data);
+  }
+
+  async function callAI(action){
+    return currentProvider()==='gemini'
+      ? callGemini(action)
+      : callOpenAI(action);
+  }
+
+  function extractOpenAIText(data){
+    if(typeof data.output_text==='string' && data.output_text.trim()){
+      return data.output_text.trim();
+    }
+    const out=[];
+    for(const item of (data.output||[])){
+      if(item.type==='message'){
+        for(const c of (item.content||[])){
+          if((c.type==='output_text'||c.type==='text') && c.text) out.push(c.text);
+        }
+      }
+    }
+    if(out.length) return out.join('\n').trim();
+    throw new Error('OpenAIの返答本文を取得できませんでした。');
+  }
+
+  function extractGeminiText(data){
+    const out=[];
+    for(const candidate of (data.candidates||[])){
+      for(const part of (candidate?.content?.parts||[])){
+        if(typeof part?.text==='string' && part.text.trim()) out.push(part.text);
+      }
+    }
+    if(out.length) return out.join('\n').trim();
+
+    const reason=data?.candidates?.[0]?.finishReason;
+    if(reason) throw new Error('Geminiから文章が返りませんでした。終了理由: '+reason);
+    throw new Error('Geminiの返答本文を取得できませんでした。');
+  }
+
+  actionButtons.forEach(btn=>{
+    btn.addEventListener('click',async()=>{
+      const action=btn.dataset.action;
+      if(working || !state.currentText) return;
+
+      const input=state.currentText;
+      working=true;
+      setButtonsDisabled(true);
+      bubbleText.innerHTML=`<span class="loading-row"><span class="spinner"></span>${escapeHTML(actionName(action))}…</span>`;
+
+      try{
+        const output=await callAI(action);
+        state.currentText=output;
+        state.history.push({action,input,output});
+        if(action!=='verify') state.lastTransformAction=action;
+        await replaceBubbleText(output);
+      }catch(e){
+        console.error(e);
+        if(e.message!=='API Key未設定'){
+          if(e.kind==='billing'){
+            await replaceBubbleText('OpenAI API Keyは届いていますが、API残高がありません。\n\n⚙ 設定でGeminiに切り替えることもできます。');
+          }else{
+            const aiName=currentProvider()==='gemini' ? 'Gemini' : 'OpenAI';
+            await replaceBubbleText(aiName+' APIを利用できませんでした。\n\n'+e.message);
+          }
+        }
+      }finally{
+        working=false;
+        setButtonsDisabled(!state.originalText);
+      }
+    });
+  });
+
+  function openSettings(message=''){
+    settingsState.textContent=message;
+    modal.classList.remove('hidden');
+    setTimeout(()=>apiKeyInput.focus(),50);
+  }
+  function closeSettingsModal(){
+    modal.classList.add('hidden');
+  }
+
+  providerSelect.addEventListener('change',syncProviderUI);
+  syncProviderUI();
+
+  settingsBtn.addEventListener('click',()=>openSettings());
+  closeSettings.addEventListener('click',closeSettingsModal);
+  modal.addEventListener('click',ev=>{
+    if(ev.target===modal) closeSettingsModal();
+  });
+  document.addEventListener('keydown',ev=>{
+    if(ev.key==='Escape' && !modal.classList.contains('hidden')) closeSettingsModal();
+  });
+
+  toggleKey.addEventListener('click',()=>{
+    const show=apiKeyInput.type==='password';
+    apiKeyInput.type=show?'text':'password';
+    toggleKey.textContent=show?'隠す':'表示';
+  });
+
+  saveSettings.addEventListener('click',async()=>{
+    const key=apiKeyInput.value.trim();
+
+    if(key){
+      setCurrentKey(key);
+      apiKeyInput.value='';
+      apiKeyInput.placeholder='設定済み（変更する場合だけ貼り付け）';
+    }else if(!currentKey()){
+      settingsState.textContent=(currentProvider()==='gemini'?'Gemini':'OpenAI')+' API Keyを貼り付けてください。';
+      return;
+    }
+
+    saveSettings.disabled=true;
+    const aiName=currentProvider()==='gemini' ? 'Gemini' : 'OpenAI';
+    settingsState.textContent=aiName+' APIへ接続テスト中…';
+
+    try{
+      const reply=await testAIConnection();
+      settingsState.innerHTML='<span class="status-dot ok"></span>'+aiName+' 接続成功：'+escapeHTML(reply || '接続OK');
+      setTimeout(closeSettingsModal,900);
+    }catch(e){
+      console.error(e);
+      if(e.kind==='billing'){
+        settingsState.innerHTML=
+          '<b>OpenAI API Keyは届いていますが、API残高がありません。</b><br>'+
+          'AIの選択をGeminiへ変えて、Gemini API Keyを設定することもできます。';
+      }else{
+        settingsState.textContent='接続できません：'+(e.message||e);
+      }
+    }finally{
+      saveSettings.disabled=false;
+    }
+  });
+
+  captureBtn.addEventListener('click',captureScreen);
+
+  // 初期canvas
+  canvas.width=1280;
+  canvas.height=720;
+  draw();
+})();
+</script>
+</body>
+</html>
