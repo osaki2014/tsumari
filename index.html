@@ -276,6 +276,15 @@
     background:#bbb;margin-right:5px
   }
   .status-dot.ok{background:#16835d}
+  .free-note{
+    margin:10px 0 0;
+    padding:10px 11px;
+    border:1.5px solid #111;
+    border-radius:12px;
+    background:#f7fff9;
+    font-size:12px;
+    line-height:1.65;
+  }
 
   @media(max-width:760px){
     main{padding:8px}
@@ -327,7 +336,9 @@
     <div class="field">
       <label for="provider">AI</label>
       <select id="provider">
-        <option value="gemini">Gemini</option>
+        <option value="chromeai">Chrome内蔵AI（無料・APIキー不要）</option>
+        <option value="gemini-free">Gemini無料枠（2.5 Flash-Lite）</option>
+        <option value="gemini">Gemini（通常）</option>
         <option value="openai">OpenAI</option>
       </select>
     </div>
@@ -409,6 +420,7 @@
   // API key は永続保存しない
   let openAIKey = '';
   let geminiKey = '';
+  let geminiFreeKey = '';
 
   let state = freshState();
 
@@ -766,10 +778,17 @@ Web検索ツールが利用できない場合は、原文との比較と、あ�
   }
 
   const providerModels = {
+    chromeai: [
+      ['chrome-gemini-nano','Gemini Nano（Chrome内蔵）']
+    ],
+    'gemini-free': [
+      ['gemini-2.5-flash-lite','Gemini 2.5 Flash-Lite（無料枠）']
+    ],
     gemini: [
-      ['gemini-3.6-flash','Gemini 3.6 Flash（おすすめ）'],
-      ['gemini-3.5-flash-lite','Gemini 3.5 Flash-Lite（軽量）'],
-      ['gemini-2.5-flash','Gemini 2.5 Flash']
+      ['gemini-3.6-flash','Gemini 3.6 Flash'],
+      ['gemini-3.5-flash-lite','Gemini 3.5 Flash-Lite'],
+      ['gemini-2.5-flash','Gemini 2.5 Flash'],
+      ['gemini-2.5-flash-lite','Gemini 2.5 Flash-Lite']
     ],
     openai: [
       ['gpt-5.6-luna','GPT-5.6 Luna（軽量）'],
@@ -783,12 +802,26 @@ Web検索ツールが利用できない場合は、原文との比較と、あ�
   }
 
   function currentKey(){
-    return currentProvider()==='gemini' ? geminiKey : openAIKey;
+    const p=currentProvider();
+    if(p==='gemini-free') return geminiFreeKey;
+    if(p==='gemini') return geminiKey;
+    if(p==='openai') return openAIKey;
+    return '';
   }
 
   function setCurrentKey(key){
-    if(currentProvider()==='gemini') geminiKey=key;
-    else openAIKey=key;
+    const p=currentProvider();
+    if(p==='gemini-free') geminiFreeKey=key;
+    else if(p==='gemini') geminiKey=key;
+    else if(p==='openai') openAIKey=key;
+  }
+
+  function providerName(){
+    const p=currentProvider();
+    if(p==='chromeai') return 'Chrome内蔵AI';
+    if(p==='gemini-free') return 'Gemini無料枠';
+    if(p==='gemini') return 'Gemini';
+    return 'OpenAI';
   }
 
   function syncProviderUI(){
@@ -797,50 +830,93 @@ Web検索ツールが利用できない場合は、原文との比較と、あ�
       .map(([value,label])=>`<option value="${value}">${label}</option>`)
       .join('');
 
-    settingsTitle.textContent = p==='gemini' ? 'Gemini 設定' : 'OpenAI 設定';
-    apiKeyLabel.textContent = p==='gemini' ? 'Gemini API Key' : 'OpenAI API Key';
+    const isChrome=p==='chromeai';
+    const isGeminiFree=p==='gemini-free';
+    const isGemini=p==='gemini' || isGeminiFree;
+
+    settingsTitle.textContent =
+      isChrome ? 'Chrome内蔵AI 設定' :
+      isGeminiFree ? 'Gemini 無料枠 設定' :
+      p==='gemini' ? 'Gemini 設定' : 'OpenAI 設定';
+
+    // Chrome内蔵AIはAPIキー不要
+    apiKeyInput.closest('.field').classList.toggle('hidden',isChrome);
+    modelSelect.closest('.field').classList.toggle('hidden',isChrome);
+
+    if(isGemini){
+      apiKeyLabel.textContent = isGeminiFree ? 'Gemini Free Tier API Key' : 'Gemini API Key';
+    }else if(p==='openai'){
+      apiKeyLabel.textContent='OpenAI API Key';
+    }
+
     apiKeyInput.value='';
     apiKeyInput.type='password';
     toggleKey.textContent='表示';
 
-    const configured=!!currentKey();
-    apiKeyInput.placeholder = configured
-      ? '設定済み（変更する場合だけ貼り付け）'
-      : (p==='gemini' ? 'Google AI Studio のキーを貼り付け' : 'sk-...');
+    const configured=isChrome || !!currentKey();
+    if(!isChrome){
+      apiKeyInput.placeholder = currentKey()
+        ? '設定済み（変更する場合だけ貼り付け）'
+        : (isGemini ? 'Google AI Studio のキーを貼り付け' : 'sk-...');
+    }
 
-    if(p==='gemini'){
+    // Web検索の設定は通常Geminiだけに表示。
+    // 無料モードはAPI消費を抑えるため検索なし。
+    searchGroundingField.classList.toggle('hidden',p!=='gemini');
+
+    if(isChrome){
       providerHelp.innerHTML=`
-        <b>Gemini API Keyの作り方</b>
+        <b>完全無料・APIキー不要です。</b>
+        <div class="free-note">
+          Chromeに内蔵されたGemini Nanoで、この端末の中だけで文章を処理します。
+          初回だけAIモデルのダウンロードが必要です。以後はAPI料金がかかりません。
+        </div>
+        <div class="warning" style="margin-top:10px">
+          Chrome 148以降の対応PCが必要です。macOS 13以降、Windows 10/11などで、
+          十分な空き容量・メモリが必要です。利用できないPCではGemini無料枠を選んでください。
+          GitHub Pages（https://）で開く方法を推奨します。
+        </div>`;
+    }else if(isGeminiFree){
+      providerHelp.innerHTML=`
+        <b>Gemini APIのFree Tierを使います。</b>
         <ol>
-          <li>Google AI Studio の <b>API Keys</b> を開きます。</li>
-          <li>Googleアカウントでログインします。</li>
-          <li>表示済みのキーをコピーするか、<b>Create API key</b> で作成します。</li>
-          <li>上の欄へ貼り付けて「このタブで使う・接続テスト」を押します。</li>
+          <li>Google AI Studioで、<b>課金を設定していないFree Tierプロジェクト</b>を用意します。</li>
+          <li>そのプロジェクトのAPI Keyを作成またはコピーします。</li>
+          <li>上の欄へ貼り付けます。</li>
+          <li>モデルは無料枠のある <b>Gemini 2.5 Flash-Lite</b> に固定しています。</li>
         </ol>
         <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio の API Keys を開く ↗</a>
-        <div class="warning" style="margin-top:10px">
-          Gemini APIにはプロジェクトやモデルに応じた無料枠があります。
-          通常の文章生成は無料枠で使える場合がありますが、Google検索によるグラウンディングは無料API枠では利用できません。
-          このアプリでは「ほんとうに？」も検索OFFなら無料枠の通常生成として動作します。
+        <div class="free-note">
+          このモードでは「ほんとうに？」もGoogle検索を呼ばず、元の文章との比較で確認します。
+          無料枠の回数制限に達した場合は429になりますが、課金設定のないFree Tierなら超過分が自動課金されることはありません。
         </div>`;
+    }else if(p==='gemini'){
+      providerHelp.innerHTML=`
+        <b>Gemini通常API</b>
+        <ol>
+          <li>Google AI StudioのAPI Keysを開きます。</li>
+          <li>利用するプロジェクトのAPI Keyをコピーします。</li>
+          <li>上の欄へ貼り付けて接続テストします。</li>
+        </ol>
+        <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio の API Keys を開く ↗</a>`;
     }else{
       providerHelp.innerHTML=`
-        <b>OpenAI API Keyの作り方</b>
+        <b>OpenAI API</b>
         <ol>
-          <li>OpenAI Platform の <b>API Keys</b> を開きます。</li>
-          <li>使うProjectを選び、<b>Create new secret key</b> を押します。</li>
-          <li>表示されたキーをコピーします。</li>
-          <li>上の欄へ貼り付けて「このタブで使う・接続テスト」を押します。</li>
+          <li>OpenAI PlatformのAPI Keysを開きます。</li>
+          <li>API Keyを作成して上の欄へ貼り付けます。</li>
         </ol>
         <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">OpenAI API Keys を開く ↗</a>
         <div class="warning" style="margin-top:10px">
           ChatGPT Plus / Pro とOpenAI APIの料金は別です。
-          <br><a href="https://platform.openai.com/settings/organization/billing/" target="_blank" rel="noopener noreferrer">OpenAI APIの請求・残高を確認する ↗</a>
         </div>`;
     }
 
-    searchGroundingField.classList.toggle('hidden', p!=='gemini');
-    settingsState.textContent = configured ? 'このタブには、このAIのキーが設定済みです。' : '';
+    if(isChrome){
+      settingsState.textContent='「このタブで使う・接続テスト」を押すと、このPCで利用できるか確認します。';
+    }else{
+      settingsState.textContent = configured ? 'このタブには、このAIのキーが設定済みです。' : '';
+    }
   }
 
   function friendlyOpenAIError(res, data){
@@ -885,10 +961,126 @@ Web検索ツールが利用できない場合は、原文との比較と、あ�
       e.kind='auth'; return e;
     }
     if(res.status===429){
-      const e=new Error('Gemini APIの利用上限に達した可能性があります。Google AI StudioのUsage / Rate limitsを確認してください。');
+      const e=new Error('Gemini APIの現在の利用上限に達しました。無料枠では時間または日単位の上限があり、上限を超えると429になります。');
       e.kind='rate'; return e;
     }
     return new Error(msg || `Gemini API: HTTP ${res.status}`);
+  }
+
+  function chromeAIOptions(){
+    return {
+      expectedInputs:[{type:'text',languages:['ja']}],
+      expectedOutputs:[{type:'text',languages:['ja']}]
+    };
+  }
+
+  async function chromeAIAvailability(){
+    if(!('LanguageModel' in window)){
+      const e=new Error('このChromeでは内蔵AIのPrompt APIを利用できません。Chromeを最新版に更新するか、Gemini無料枠を選んでください。');
+      e.kind='unsupported';
+      throw e;
+    }
+    try{
+      return await LanguageModel.availability(chromeAIOptions());
+    }catch(err){
+      const e=new Error('Chrome内蔵AIを確認できませんでした。GitHub Pages（https://）で開き、対応するChromeでお試しください。');
+      e.kind='unsupported';
+      throw e;
+    }
+  }
+
+  async function createChromeAISession(onProgress){
+    const availability=await chromeAIAvailability();
+    if(availability==='unavailable'){
+      const e=new Error('このPCではChrome内蔵AIを利用できません。対応条件を満たしていない可能性があります。Gemini無料枠を選んでください。');
+      e.kind='unsupported';
+      throw e;
+    }
+
+    const opts={
+      ...chromeAIOptions(),
+      monitor(m){
+        m.addEventListener('downloadprogress',e=>{
+          if(onProgress) onProgress(Math.round((e.loaded||0)*100));
+        });
+      }
+    };
+    return await LanguageModel.create(opts);
+  }
+
+  async function callChromeAI(action){
+    let session;
+    try{
+      session=await createChromeAISession(p=>{
+        if(working){
+          bubbleText.innerHTML=`<span class="loading-row"><span class="spinner"></span>無料AIを準備中… ${p}%</span>`;
+        }
+      });
+      const text=await session.prompt(promptFor(action));
+      if(!text || !String(text).trim()) throw new Error('Chrome内蔵AIから文章が返りませんでした。');
+      return String(text).trim();
+    }finally{
+      try{session?.destroy()}catch{}
+    }
+  }
+
+  async function testChromeAIConnection(){
+    let session;
+    try{
+      settingsState.textContent='Chrome内蔵AIを確認しています…';
+      session=await createChromeAISession(p=>{
+        settingsState.textContent=`Chrome内蔵AIを準備しています… ${p}%`;
+      });
+      const text=await session.prompt('日本語で「接続OK」とだけ答えてください。');
+      return String(text||'接続OK').trim();
+    }finally{
+      try{session?.destroy()}catch{}
+    }
+  }
+
+  async function testGeminiFreeConnection(){
+    if(!geminiFreeKey) throw new Error('Gemini Free Tier API Keyを入力してください。');
+    const url='https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent';
+    const res=await fetch(url,{
+      method:'POST',
+      headers:{
+        'x-goog-api-key':geminiFreeKey,
+        'Content-Type':'application/json'
+      },
+      body:JSON.stringify({
+        contents:[{role:'user',parts:[{text:'接続確認です。「接続OK」とだけ返してください。'}]}],
+        generationConfig:{temperature:0}
+      })
+    });
+    const raw=await res.text();
+    let data;
+    try{data=JSON.parse(raw)}catch{data={error:{message:raw}}}
+    if(!res.ok) throw friendlyGeminiError(res,data);
+    return extractGeminiText(data);
+  }
+
+  async function callGeminiFree(action){
+    if(!geminiFreeKey){
+      openSettings('Gemini Free Tier API Keyを入力してください。');
+      throw new Error('API Key未設定');
+    }
+    const url='https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent';
+    const res=await fetch(url,{
+      method:'POST',
+      headers:{
+        'x-goog-api-key':geminiFreeKey,
+        'Content-Type':'application/json'
+      },
+      body:JSON.stringify({
+        contents:[{role:'user',parts:[{text:promptFor(action)}]}],
+        generationConfig:{temperature:action==='verify'?0.1:0.35}
+      })
+    });
+    const raw=await res.text();
+    let data;
+    try{data=JSON.parse(raw)}catch{data={error:{message:raw}}}
+    if(!res.ok) throw friendlyGeminiError(res,data);
+    return extractGeminiText(data);
   }
 
   async function testOpenAIConnection(){
@@ -942,9 +1134,11 @@ Web検索ツールが利用できない場合は、原文との比較と、あ�
   }
 
   async function testAIConnection(){
-    return currentProvider()==='gemini'
-      ? testGeminiConnection()
-      : testOpenAIConnection();
+    const p=currentProvider();
+    if(p==='chromeai') return testChromeAIConnection();
+    if(p==='gemini-free') return testGeminiFreeConnection();
+    if(p==='gemini') return testGeminiConnection();
+    return testOpenAIConnection();
   }
 
   async function callOpenAI(action){
@@ -1035,9 +1229,11 @@ Web検索ツールが利用できない場合は、原文との比較と、あ�
   }
 
   async function callAI(action){
-    return currentProvider()==='gemini'
-      ? callGemini(action)
-      : callOpenAI(action);
+    const p=currentProvider();
+    if(p==='chromeai') return callChromeAI(action);
+    if(p==='gemini-free') return callGeminiFree(action);
+    if(p==='gemini') return callGemini(action);
+    return callOpenAI(action);
   }
 
   function extractOpenAIText(data){
@@ -1092,8 +1288,8 @@ Web検索ツールが利用できない場合は、原文との比較と、あ�
           if(e.kind==='billing'){
             await replaceBubbleText('OpenAI API Keyは届いていますが、API残高がありません。\n\n⚙ 設定でGeminiに切り替えることもできます。');
           }else{
-            const aiName=currentProvider()==='gemini' ? 'Gemini' : 'OpenAI';
-            await replaceBubbleText(aiName+' APIを利用できませんでした。\n\n'+e.message);
+            const aiName=providerName();
+            await replaceBubbleText(aiName+'を利用できませんでした。\n\n'+e.message);
           }
         }
       }finally{
@@ -1131,31 +1327,39 @@ Web検索ツールが利用できない場合は、原文との比較と、あ�
   });
 
   saveSettings.addEventListener('click',async()=>{
+    const p=currentProvider();
+    const isChrome=p==='chromeai';
     const key=apiKeyInput.value.trim();
 
-    if(key){
-      setCurrentKey(key);
-      apiKeyInput.value='';
-      apiKeyInput.placeholder='設定済み（変更する場合だけ貼り付け）';
-    }else if(!currentKey()){
-      settingsState.textContent=(currentProvider()==='gemini'?'Gemini':'OpenAI')+' API Keyを貼り付けてください。';
-      return;
+    if(!isChrome){
+      if(key){
+        setCurrentKey(key);
+        apiKeyInput.value='';
+        apiKeyInput.placeholder='設定済み（変更する場合だけ貼り付け）';
+      }else if(!currentKey()){
+        settingsState.textContent=providerName()+'のAPI Keyを貼り付けてください。';
+        return;
+      }
     }
 
     saveSettings.disabled=true;
-    const aiName=currentProvider()==='gemini' ? 'Gemini' : 'OpenAI';
-    settingsState.textContent=aiName+' APIへ接続テスト中…';
+    const aiName=providerName();
+    settingsState.textContent=aiName+'を接続テスト中…';
 
     try{
       const reply=await testAIConnection();
       settingsState.innerHTML='<span class="status-dot ok"></span>'+aiName+' 接続成功：'+escapeHTML(reply || '接続OK');
-      setTimeout(closeSettingsModal,900);
+      setTimeout(closeSettingsModal,1000);
     }catch(e){
       console.error(e);
       if(e.kind==='billing'){
         settingsState.innerHTML=
-          '<b>OpenAI API Keyは届いていますが、API残高がありません。</b><br>'+
-          'AIの選択をGeminiへ変えて、Gemini API Keyを設定することもできます。';
+          '<b>OpenAI APIの残高がありません。</b><br>'+
+          '上のAIを「Chrome内蔵AI」または「Gemini無料枠」に切り替えると、無料で利用できます。';
+      }else if(e.kind==='rate' && p==='gemini-free'){
+        settingsState.innerHTML=
+          '<b>Gemini無料枠の現在の上限に達しています。</b><br>'+
+          '時間をおいて再試行するか、「Chrome内蔵AI」を選ぶとAPI上限なしで利用できます。';
       }else{
         settingsState.textContent='接続できません：'+(e.message||e);
       }
