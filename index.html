@@ -172,6 +172,10 @@
   }
   .word-btn:hover:not(:disabled){background:#111;color:#fff;transform:translateY(-1px)}
   .word-btn:disabled{opacity:.35;cursor:not-allowed}
+  .word-btn[data-action="understood"],
+  .word-btn[data-action="confused"]{
+    background:#f7f7f4;
+  }
 
   .bubble-body{
     overflow:auto;
@@ -318,6 +322,8 @@
         <button class="word-btn" data-action="analogy">いいかえると</button>
         <button class="word-btn" data-action="summary">つまり</button>
         <button class="word-btn" data-action="verify">ほんとうに？</button>
+        <button class="word-btn" data-action="understood">わかった</button>
+        <button class="word-btn" data-action="confused">わからん</button>
       </div>
       <div class="bubble-body">
         <div id="bubbleText" class="bubble-text"></div>
@@ -672,7 +678,9 @@
       explain:'ということは',
       analogy:'いいかえると',
       summary:'つまり',
-      verify:'ほんとうに？'
+      verify:'ほんとうに？',
+      understood:'わかった',
+      confused:'わからん'
     }[action]||action;
   }
 
@@ -741,6 +749,46 @@ ${current}`;
 同じボタンがもう一度押された場合は、現在のまとめをさらに短くしながら、大切な意味は残してください。
 
 読んでいる文章：
+${current}`;
+    }
+
+    if(action==='understood'){
+      return `${base}
+
+これまでの説明を読んだ相手が
+「わかった」
+と伝えてくれました。
+
+それまでのやり取りと現在の文章を踏まえて、その理解を受け止める、短く丁寧で自然な返答をしてください。
+必要であれば、理解できたポイントを一言だけ確認してもかまいません。
+新しい説明を長く始めたり、別の話題を足したりしないでください。
+「よかったです。」「理解できたようで何よりです。」だけで終えるのではなく、直前まで扱っていた内容に少し触れた、やり取りとして自然な返答にしてください。
+
+最初の文章：
+${original}
+
+現在の文章：
+${current}`;
+    }
+
+    if(action==='confused'){
+      return `${base}
+
+これまでの説明を読んだ相手が
+「わからん」
+と伝えました。
+
+まず、説明が分かりにくかったことを丁寧に短く謝ってください。
+「申し訳ありません。」「説明が分かりにくかったですね。」など、落ち着いた「です・ます」調にしてください。
+
+その直後に、「つまり？」と聞かれた場合と同じ考え方で、現在の文章をさらに分かりやすく、短くまとめ直してください。
+ただ短くするだけではなく、読み手の知識量と語彙がおおむね小学5年生までであることを前提に、最も大切な意味が伝わるようにしてください。
+返答全体は一続きの自然な文章にしてください。
+
+最初の文章：
+${original}
+
+現在の文章：
 ${current}`;
     }
 
@@ -1327,7 +1375,12 @@ Web検索ツールが利用できない場合は、原文との比較と、あ�
         const output=await callAI(action);
         state.currentText=output;
         state.history.push({action,input,output});
-        if(action!=='verify') state.lastTransformAction=action;
+        if(action==='confused'){
+          // 「わからん」は謝罪を添えた「つまり」として扱う
+          state.lastTransformAction='summary';
+        }else if(action!=='verify' && action!=='understood'){
+          state.lastTransformAction=action;
+        }
 
         // Chrome内蔵AIは生成中から逐次表示しているので、最後に重い差し替えをしない
         if(currentProvider()==='chromeai'){
