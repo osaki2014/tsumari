@@ -172,11 +172,11 @@
   }
   .word-btn:hover:not(:disabled){background:#111;color:#fff;transform:translateY(-1px)}
   .word-btn:disabled{opacity:.35;cursor:not-allowed}
-  .word-btn[data-action="understood"],
-  .word-btn[data-action="confused"]{
-    background:#f7f7f4;
-  }
 
+
+  .bubble-toolbar .word-btn:nth-child(5){
+    margin-left:4px;
+  }
   .bubble-body{
     overflow:auto;
     max-height:350px;
@@ -373,6 +373,16 @@
     <button id="saveSettings" class="save-btn">このタブで使う・接続テスト</button>
     <div id="settingsState" class="test"></div>
 
+    <div class="help">
+      <b>やりとりの記録</b>
+      <div class="free-note">
+        OCRした文章、押したボタン、AIへの入力、AIの返答、時刻、AI設定をこのタブ内で記録します。
+      </div>
+      <div style="height:8px"></div>
+      <button id="downloadCsv" class="save-btn" type="button">履歴をCSVで保存</button>
+      <div id="historyCount" class="test">履歴 0件</div>
+    </div>
+
     <div id="providerHelp" class="help"></div>
 
     <div class="warning">
@@ -416,6 +426,8 @@
   const providerHelp = $('#providerHelp');
   const searchGroundingField = $('#searchGroundingField');
   const useSearchGrounding = $('#useSearchGrounding');
+  const downloadCsv = $('#downloadCsv');
+  const historyCount = $('#historyCount');
 
   let baseImage = null;
   let dragging = false;
@@ -434,6 +446,10 @@
 
   let state = freshState();
 
+  // タブを閉じるまで保持する全やりとり履歴
+  let interactionLog = [];
+  let selectionSession = 0;
+
   function freshState(){
     return {
       originalText:'',
@@ -446,6 +462,98 @@
   function resetState(){
     state = freshState();
     bubbleText.textContent = '';
+  }
+
+  function nowISO(){
+    return new Date().toISOString();
+  }
+
+  function localTimeString(){
+    const d=new Date();
+    const pad=n=>String(n).padStart(2,'0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+
+  function currentModelLabel(){
+    if(currentProvider()==='chromeai') return 'Gemini Nano (Chrome built-in)';
+    return modelSelect?.value || '';
+  }
+
+  function logInteraction(kind, action, input, output, extra=''){
+    interactionLog.push({
+      session: selectionSession,
+      time_iso: nowISO(),
+      time_local: localTimeString(),
+      kind,
+      action: action || '',
+      provider: providerName ? providerName() : '',
+      provider_id: currentProvider ? currentProvider() : '',
+      model: currentModelLabel(),
+      input: input || '',
+      output: output || '',
+      original_text: state.originalText || '',
+      extra: extra || ''
+    });
+    if(historyCount) historyCount.textContent=`履歴 ${interactionLog.length}件`;
+  }
+
+  function csvEscape(value){
+    const s=String(value ?? '');
+    return '"' + s.replace(/"/g,'""') + '"';
+  }
+
+  function downloadHistoryCSV(){
+    if(!interactionLog.length){
+      settingsState.textContent='まだ保存できる履歴がありません。';
+      return;
+    }
+
+    const header=[
+      'session',
+      'time_local',
+      'time_iso',
+      'kind',
+      'action',
+      'provider',
+      'provider_id',
+      'model',
+      'original_text',
+      'input',
+      'output',
+      'extra'
+    ];
+
+    const rows=[header.map(csvEscape).join(',')];
+    for(const r of interactionLog){
+      rows.push([
+        r.session,
+        r.time_local,
+        r.time_iso,
+        r.kind,
+        r.action,
+        r.provider,
+        r.provider_id,
+        r.model,
+        r.original_text,
+        r.input,
+        r.output,
+        r.extra
+      ].map(csvEscape).join(','));
+    }
+
+    // Excelで日本語が文字化けしにくいようBOM付きUTF-8
+    const blob=new Blob(['\uFEFF'+rows.join('\r\n')],{type:'text/csv;charset=utf-8'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    const d=new Date();
+    const pad=n=>String(n).padStart(2,'0');
+    a.href=url;
+    a.download=`kotoba_hiraku_history_${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    settingsState.textContent=`履歴 ${interactionLog.length}件をCSVで保存しました。`;
   }
 
   function setButtonsDisabled(v){
@@ -551,6 +659,7 @@
     }
 
     // 新しい矩形で完全リセット
+    selectionSession += 1;
     resetState();
     hint.classList.add('hidden');
     draw();
@@ -588,6 +697,8 @@
       state.currentText=text;
 
       if(text){
+        logInteraction('ocr','OCR','',text,'矩形領域をOCR');
+
         await replaceBubbleText(text);
       }else{
         await replaceBubbleText('文字をうまく読み取れませんでした。もう一度、文字の周りを少し広めに囲んでください。');
@@ -688,9 +799,13 @@
     const original=state.originalText.trim();
     const current=state.currentText.trim();
 
-    const lastTransform=[...state.history].reverse().find(h=>h.action!=='verify');
+    // 「わかった」「わからん」は説明方法そのものではないため除外して、
+    // 直前の実質的な変換ボタンを探す。
+    const transformActions=['explain','analogy','summary','verify'];
+    const lastTransform=[...state.history].reverse().find(h=>transformActions.includes(h.action));
     const previousAction=lastTransform?.action || state.lastTransformAction || 'explain';
     const previousInput=lastTransform?.input || original;
+    const previousOutput=lastTransform?.output || current;
 
     const base=`あなたは、文章を丁寧に説明する先生です。
 読み手の知識量と語彙は、おおむね小学5年生までを前提にしてください。
@@ -705,6 +820,63 @@
 - 「小学5年生向けに説明します」などの前置きは不要。
 - Markdown、見出し、箇条書きは原則使わない。
 - 吹き出しにそのまま表示できる、自然で簡潔な返答本文だけを書く。`;
+
+    if(action==='understood'){
+      return `${base}
+
+これまでのやりとりのあと、読み手が
+「わかった」
+と伝えました。
+
+【最初の文章】
+${original}
+
+【現在の説明】
+${current}
+
+【直前に行った説明方法】
+${actionName(previousAction)}
+
+この「わかった」への返答として、そのやりとりに合った短く丁寧な返事をしてください。
+単なる「よかったです」だけではなく、必要なら今理解できた大事な点を一言だけ確認してもかまいません。
+新しい説明を長く始めたり、問題を出したり、次の行動を強要したりしないでください。
+自然な「です・ます」調で、1〜2文程度にしてください。`;
+    }
+
+    if(action==='confused'){
+      return `${base}
+
+これまでの説明を読んだあと、読み手が
+「わからん」
+と伝えました。
+
+【最初の文章】
+${original}
+
+【直前に押された説明ボタン】
+${actionName(previousAction)}
+
+【そのボタンを押す一つ前の文章】
+${previousInput}
+
+【そのボタンで出した説明】
+${previousOutput}
+
+まず、分かりにくい説明になったことを丁寧に短く謝ってください。
+「申し訳ありません。別の見方で説明します。」のような表現で構いません。
+
+そのあと、【そのボタンを押す一つ前の文章】に戻り、
+「${actionName(previousAction)}」という同じ目的を、
+さきほどとは違う視点・違う説明の順序・違う具体例で、もう一度実行してください。
+
+重要：
+- さきほどの説明文を単に言い換えるのではなく、一つ前の文章から説明を作り直す。
+- 何が難しかったかを勝手に決めつけない。
+- 語彙と前提知識は小学5年生程度までにする。
+- 丁寧な「です・ます」調にする。
+- できるだけ具体的にしながらも、長くしすぎない。
+- 吹き出しにそのまま表示する返答だけを書く。`;
+    }
 
     if(action==='explain'){
       return `${base}
@@ -749,46 +921,6 @@ ${current}`;
 同じボタンがもう一度押された場合は、現在のまとめをさらに短くしながら、大切な意味は残してください。
 
 読んでいる文章：
-${current}`;
-    }
-
-    if(action==='understood'){
-      return `${base}
-
-これまでの説明を読んだ相手が
-「わかった」
-と伝えてくれました。
-
-それまでのやり取りと現在の文章を踏まえて、その理解を受け止める、短く丁寧で自然な返答をしてください。
-必要であれば、理解できたポイントを一言だけ確認してもかまいません。
-新しい説明を長く始めたり、別の話題を足したりしないでください。
-「よかったです。」「理解できたようで何よりです。」だけで終えるのではなく、直前まで扱っていた内容に少し触れた、やり取りとして自然な返答にしてください。
-
-最初の文章：
-${original}
-
-現在の文章：
-${current}`;
-    }
-
-    if(action==='confused'){
-      return `${base}
-
-これまでの説明を読んだ相手が
-「わからん」
-と伝えました。
-
-まず、説明が分かりにくかったことを丁寧に短く謝ってください。
-「申し訳ありません。」「説明が分かりにくかったですね。」など、落ち着いた「です・ます」調にしてください。
-
-その直後に、「つまり？」と聞かれた場合と同じ考え方で、現在の文章をさらに分かりやすく、短くまとめ直してください。
-ただ短くするだけではなく、読み手の知識量と語彙がおおむね小学5年生までであることを前提に、最も大切な意味が伝わるようにしてください。
-返答全体は一続きの自然な文章にしてください。
-
-最初の文章：
-${original}
-
-現在の文章：
 ${current}`;
     }
 
@@ -1374,13 +1506,22 @@ Web検索ツールが利用できない場合は、原文との比較と、あ�
       try{
         const output=await callAI(action);
         state.currentText=output;
-        state.history.push({action,input,output});
-        if(action==='confused'){
-          // 「わからん」は謝罪を添えた「つまり」として扱う
-          state.lastTransformAction='summary';
-        }else if(action!=='verify' && action!=='understood'){
+        state.history.push({
+          action,
+          input,
+          output,
+          time:Date.now(),
+          provider:providerName(),
+          model:currentModelLabel()
+        });
+
+        // 「わかった」「わからん」は説明命令ではないので、
+        // 次の「わからん」で参照する直前命令を上書きしない。
+        if(['explain','analogy','summary','verify'].includes(action)){
           state.lastTransformAction=action;
         }
+
+        logInteraction('ai',actionName(action),input,output,'');
 
         // Chrome内蔵AIは生成中から逐次表示しているので、最後に重い差し替えをしない
         if(currentProvider()==='chromeai'){
@@ -1456,6 +1597,7 @@ Web検索ツールが利用できない場合は、原文との比較と、あ�
     try{
       const reply=await testAIConnection();
       settingsState.innerHTML='<span class="status-dot ok"></span>'+aiName+' 接続成功：'+escapeHTML(reply || '接続OK');
+      logInteraction('setting','AI設定','',aiName+' / '+currentModelLabel(),'接続テスト成功');
       setTimeout(closeSettingsModal,1000);
     }catch(e){
       console.error(e);
@@ -1474,6 +1616,10 @@ Web検索ツールが利用できない場合は、原文との比較と、あ�
       saveSettings.disabled=false;
     }
   });
+
+  if(downloadCsv){
+    downloadCsv.addEventListener('click',downloadHistoryCSV);
+  }
 
   window.addEventListener('beforeunload',()=>{
     try{chromeAISession?.destroy()}catch{}
