@@ -106,55 +106,104 @@
     position:absolute;
     z-index:20;
     width:min(430px,calc(100% - 28px));
-    max-height:min(460px,calc(100% - 28px));
-    background:#fff;
+    height:min(360px,calc(100% - 28px));
+    min-width:300px;
+    min-height:190px;
+    max-width:calc(100% - 16px);
+    max-height:calc(100% - 16px);
+    background:transparent;
     color:#111;
-    border:2px solid #111;
-    border-radius:24px;
-    box-shadow:8px 9px 0 rgba(0,0,0,.22);
-    padding:13px 14px 16px;
+    padding:8px 14px 16px;
     opacity:0;
     transform:translateY(10px) scale(.97);
     transition:opacity .2s ease, transform .25s cubic-bezier(.2,.8,.2,1),
                left .18s ease, top .18s ease;
+    display:flex;
+    flex-direction:column;
+    overflow:visible;
   }
   .bubble.show{opacity:1;transform:translateY(0) scale(1)}
-  .bubble::before{
+  .bubble.dragging,.bubble.resizing{transition:none!important}
+
+  .bubble-shape-layer{
+    position:absolute;
+    inset:0;
+    width:100%;
+    height:100%;
+    z-index:0;
+    overflow:visible;
+    pointer-events:none;
+  }
+  .bubble-shape{
+    fill:#fff;
+    stroke:#111;
+    stroke-width:2;
+    stroke-linejoin:round;
+    stroke-linecap:round;
+    vector-effect:non-scaling-stroke;
+    filter:drop-shadow(8px 9px 0 rgba(0,0,0,.22));
+  }
+
+  .bubble-drag-handle{
+    position:relative;
+    z-index:2;
+    flex:0 0 12px;
+    height:12px;
+    display:grid;
+    place-items:center;
+    cursor:grab;
+    touch-action:none;
+    margin:-2px 0 3px;
+  }
+  .bubble-drag-handle:active{cursor:grabbing}
+  .bubble-drag-handle::before{
+    content:"";
+    width:42px;
+    height:4px;
+    border-radius:999px;
+    background:#d4d4d4;
+  }
+
+  .bubble-resize-handle{
+    position:absolute;
+    right:5px;
+    bottom:5px;
+    width:19px;
+    height:19px;
+    cursor:nwse-resize;
+    touch-action:none;
+    z-index:3;
+    opacity:.55;
+  }
+  .bubble-resize-handle::before,
+  .bubble-resize-handle::after{
     content:"";
     position:absolute;
-    width:22px;height:22px;
-    background:#fff;
-    border-left:2px solid #111;
-    border-bottom:2px solid #111;
-    transform:rotate(45deg);
-    left:-12px;
-    top:42px;
+    right:1px;
+    bottom:1px;
+    width:12px;
+    height:2px;
+    background:#777;
+    transform-origin:right center;
+    transform:rotate(-45deg);
+    border-radius:2px;
   }
-  .bubble.left::before{
-    left:auto;
-    right:-12px;
-    border-left:0;
-    border-bottom:0;
-    border-right:2px solid #111;
-    border-top:2px solid #111;
-  }
-  .bubble.bottom::before{
-    left:42px;
-    right:auto;
-    top:-12px;
-    border-left:2px solid #111;
-    border-bottom:0;
-    border-top:2px solid #111;
-    border-right:0;
+  .bubble-resize-handle::after{
+    width:7px;
+    right:1px;
+    bottom:6px;
   }
 
   .bubble-toolbar{
+    position:relative;
+    z-index:2;
     display:flex;
     flex-wrap:wrap;
     gap:6px;
     padding-bottom:10px;
     margin-bottom:10px;
     border-bottom:1px solid #ddd;
+    flex:0 0 auto;
   }
   .word-btn{
     appearance:none;
@@ -178,9 +227,13 @@
     margin-left:4px;
   }
   .bubble-body{
+    position:relative;
+    z-index:2;
     overflow:auto;
-    max-height:350px;
     scrollbar-width:thin;
+    flex:1 1 auto;
+    min-height:0;
+    padding-right:3px;
   }
   .bubble-text{
     font-size:17px;
@@ -293,7 +346,7 @@
   @media(max-width:760px){
     main{padding:8px}
     .workspace{height:calc(100vh - 74px);border-radius:12px}
-    .bubble{width:min(360px,calc(100% - 18px));padding:11px}
+    .bubble{width:min(360px,calc(100% - 18px));height:min(340px,calc(100% - 18px));padding:8px 11px 14px}
     .bubble-text{font-size:15px}
     .word-btn{font-size:11px;padding:6px 8px}
   }
@@ -303,7 +356,7 @@
 <header>
   <div class="brand">ことばをひらく</div>
   <div class="header-actions">
-    <button id="captureBtn" class="capture-btn">画面を取り込む</button>
+    <button id="captureBtn" class="capture-btn" title="共有する画面を選んだ後、このアプリへ自動的に戻ります">画面を取り込む</button>
     <button id="settingsBtn" class="icon-btn" aria-label="設定" title="設定">⚙</button>
   </div>
 </header>
@@ -317,6 +370,10 @@
     <div id="hint" class="hint hidden">文章のある場所をドラッグ</div>
 
     <div id="bubble" class="bubble hidden">
+      <svg id="bubbleShapeLayer" class="bubble-shape-layer" aria-hidden="true" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <path id="bubbleShapePath" class="bubble-shape" d=""></path>
+      </svg>
+      <div id="bubbleDragHandle" class="bubble-drag-handle" title="ドラッグして吹き出しを移動"></div>
       <div class="bubble-toolbar">
         <button class="word-btn" data-action="explain">ということは</button>
         <button class="word-btn" data-action="analogy">いいかえると</button>
@@ -328,6 +385,7 @@
       <div class="bubble-body">
         <div id="bubbleText" class="bubble-text"></div>
       </div>
+      <div id="bubbleResizeHandle" class="bubble-resize-handle" title="ドラッグして吹き出しの大きさを変更"></div>
     </div>
   </section>
 </main>
@@ -411,6 +469,10 @@
   const bubble = $('#bubble');
   const bubbleText = $('#bubbleText');
   const actionButtons = $$('.word-btn');
+  const bubbleDragHandle = $('#bubbleDragHandle');
+  const bubbleResizeHandle = $('#bubbleResizeHandle');
+  const bubbleShapeLayer = $('#bubbleShapeLayer');
+  const bubbleShapePath = $('#bubbleShapePath');
 
   const settingsBtn = $('#settingsBtn');
   const modal = $('#settingsModal');
@@ -434,6 +496,10 @@
   let dragStart = null;
   let selection = null;
   let working = false;
+
+  let bubbleManual = false;
+  let bubbleDragState = null;
+  let bubbleResizeState = null;
 
   // API key は永続保存しない
   let openAIKey = '';
@@ -591,10 +657,42 @@
 
   async function captureScreen(){
     try{
-      const stream = await navigator.mediaDevices.getDisplayMedia({
+      const captureOptions={
         video:{frameRate:1},
         audio:false
-      });
+      };
+
+      // 対応Chromeでは、共有対象のタブ／ウィンドウではなく
+      // 「ことばをひらく」側にフォーカスを残す。
+      let captureController=null;
+      if('CaptureController' in window){
+        try{
+          captureController=new CaptureController();
+
+          // Chromeの世代によって名称が異なるため両方に対応。
+          try{
+            captureController.setFocusBehavior('focus-capturing-application');
+          }catch(_e1){
+            try{
+              captureController.setFocusBehavior('no-focus-change');
+            }catch(_e2){}
+          }
+
+          captureOptions.controller=captureController;
+        }catch(_e){
+          captureController=null;
+        }
+      }
+
+      const stream = await navigator.mediaDevices.getDisplayMedia(captureOptions);
+
+      // ブラウザ実装がCaptureControllerを無視する場合の補助。
+      // 共有選択ダイアログが閉じた直後に元アプリへフォーカスを要求する。
+      try{ window.focus(); }catch(_e){}
+      requestAnimationFrame(()=>{ try{ window.focus(); }catch(_e){} });
+      setTimeout(()=>{ try{ window.focus(); }catch(_e){} },50);
+      setTimeout(()=>{ try{ window.focus(); }catch(_e){} },180);
+
       const video=document.createElement('video');
       video.srcObject=stream;
       video.muted=true;
@@ -614,9 +712,14 @@
         canvas.height=img.height;
         selection=null;
         resetState();
+        bubbleManual=false;
+        bubble.style.removeProperty('left');
+        bubble.style.removeProperty('top');
+        bubble.style.removeProperty('width');
+        bubble.style.removeProperty('height');
         bubble.classList.add('hidden');
         bubble.classList.remove('show');
-        empty.classList.add('hidden');
+                empty.classList.add('hidden');
         hint.classList.remove('hidden');
         draw();
       };
@@ -633,7 +736,7 @@
     dragStart=canvasPoint(ev);
     selection={x:dragStart.x,y:dragStart.y,w:0,h:0};
     bubble.classList.remove('show');
-    setTimeout(()=>bubble.classList.add('hidden'),120);
+        setTimeout(()=>bubble.classList.add('hidden'),120);
     canvas.setPointerCapture(ev.pointerId);
   });
 
@@ -661,6 +764,11 @@
     // 新しい矩形で完全リセット
     selectionSession += 1;
     resetState();
+    bubbleManual=false;
+    bubble.style.removeProperty('left');
+    bubble.style.removeProperty('top');
+    bubble.style.removeProperty('width');
+    bubble.style.removeProperty('height');
     hint.classList.add('hidden');
     draw();
     showBubbleLoading('文字を読み取っています…');
@@ -713,9 +821,13 @@
   }
 
   function showBubbleLoading(message){
-    positionBubble();
     bubble.classList.remove('hidden');
-    requestAnimationFrame(()=>bubble.classList.add('show'));
+    positionBubble(true);
+        updateBubbleShape();
+    requestAnimationFrame(()=>{
+      bubble.classList.add('show');
+      updateBubbleShape();
+    });
     bubbleText.innerHTML=`<span class="loading-row"><span class="spinner"></span>${escapeHTML(message)}</span>`;
     setButtonsDisabled(true);
   }
@@ -734,48 +846,281 @@
 
   function wait(ms){return new Promise(r=>setTimeout(r,ms))}
 
-  function positionBubble(){
-    if(!selection) return;
-
+  function selectionRectInWorkspace(){
+    if(!selection) return null;
     const wr=workspace.getBoundingClientRect();
     const cr=canvas.getBoundingClientRect();
-
     const sx=cr.width/canvas.width;
     const sy=cr.height/canvas.height;
+    return {
+      left:(cr.left-wr.left)+selection.x*sx,
+      top:(cr.top-wr.top)+selection.y*sy,
+      width:selection.w*sx,
+      height:selection.h*sy,
+      right:(cr.left-wr.left)+(selection.x+selection.w)*sx,
+      bottom:(cr.top-wr.top)+(selection.y+selection.h)*sy
+    };
+  }
 
-    const selLeft=(cr.left-wr.left)+selection.x*sx;
-    const selTop=(cr.top-wr.top)+selection.y*sy;
-    const selRight=selLeft+selection.w*sx;
-    const selBottom=selTop+selection.h*sy;
+  function clamp(n,min,max){
+    return Math.max(min,Math.min(max,n));
+  }
 
-    const gap=18;
+  function clampBubbleInsideWorkspace(){
+    if(bubble.classList.contains('hidden')) return;
+    const wr=workspace.getBoundingClientRect();
+    const margin=8;
+    const bw=bubble.offsetWidth;
+    const bh=bubble.offsetHeight;
+    const left=clamp(bubble.offsetLeft,margin,Math.max(margin,wr.width-bw-margin));
+    const top=clamp(bubble.offsetTop,margin,Math.max(margin,wr.height-bh-margin));
+    bubble.style.left=Math.round(left)+'px';
+    bubble.style.top=Math.round(top)+'px';
+  }
+
+  function positionBubble(force=false){
+    if(!selection) return;
+    if(bubbleManual && !force){
+      clampBubbleInsideWorkspace();
+      updateBubbleShape();
+      return;
+    }
+
+    const wr=workspace.getBoundingClientRect();
+    const s=selectionRectInWorkspace();
+    if(!s) return;
+
+    const gap=24;
     const margin=14;
-    const bw=Math.min(430,wr.width-28);
-    const estimatedH=Math.min(330,wr.height-28);
+    const bw=bubble.offsetWidth || Math.min(430,wr.width-28);
+    const bh=bubble.offsetHeight || Math.min(360,wr.height-28);
 
-    bubble.classList.remove('left','bottom');
-
-    let left=selRight+gap;
-    let top=Math.max(margin,Math.min(selTop,wr.height-estimatedH-margin));
+    let left=s.right+gap;
+    let top=clamp(s.top,margin,Math.max(margin,wr.height-bh-margin));
 
     if(left+bw>wr.width-margin){
-      left=selLeft-bw-gap;
-      bubble.classList.add('left');
+      left=s.left-bw-gap;
     }
 
     if(left<margin){
-      left=Math.max(margin,Math.min(selLeft,wr.width-bw-margin));
-      top=Math.min(wr.height-estimatedH-margin,selBottom+gap);
-      bubble.classList.remove('left');
-      bubble.classList.add('bottom');
+      left=clamp(s.left,margin,Math.max(margin,wr.width-bw-margin));
+      top=s.bottom+gap;
+      if(top+bh>wr.height-margin){
+        top=Math.max(margin,s.top-bh-gap);
+      }
     }
 
     bubble.style.left=Math.round(left)+'px';
-    bubble.style.top=Math.round(Math.max(margin,top))+'px';
+    bubble.style.top=Math.round(top)+'px';
+    clampBubbleInsideWorkspace();
+    updateBubbleShape();
+  }
+
+  function updateBubbleShape(){
+    if(!selection || bubble.classList.contains('hidden')) return;
+
+    const s=selectionRectInWorkspace();
+    if(!s) return;
+
+    const bw=bubble.offsetWidth;
+    const bh=bubble.offsetHeight;
+    bubbleShapeLayer.setAttribute('viewBox',`0 0 ${bw} ${bh}`);
+
+    const pad=1.5;
+    const r=Math.min(24, bw/2-3, bh/2-3);
+
+    const bcX=bw/2;
+    const bcY=bh/2;
+    const targetX=(s.left+s.width/2)-bubble.offsetLeft;
+    const targetY=(s.top+s.height/2)-bubble.offsetTop;
+
+    const dx=targetX-bcX;
+    const dy=targetY-bcY;
+    const len=Math.hypot(dx,dy);
+    if(len<10) return;
+
+    const ux=dx/len;
+    const uy=dy/len;
+    const halfW=Math.max(1,bw/2-pad);
+    const halfH=Math.max(1,bh/2-pad);
+    const tx=Math.abs(dx)>0.0001 ? halfW/Math.abs(dx) : Infinity;
+    const ty=Math.abs(dy)>0.0001 ? halfH/Math.abs(dy) : Infinity;
+    const t=Math.min(tx,ty);
+
+    const baseX=bcX+dx*t;
+    const baseY=bcY+dy*t;
+
+    const tailLength=34;
+    const halfBase=13;
+    const tip={x:baseX+ux*tailLength,y:baseY+uy*tailLength};
+    const p1={x:baseX-uy*halfBase,y:baseY+ux*halfBase};
+    const p2={x:baseX+uy*halfBase,y:baseY-ux*halfBase};
+
+    let side='right';
+    const dLeft=Math.abs(baseX-pad);
+    const dRight=Math.abs(baseX-(bw-pad));
+    const dTop=Math.abs(baseY-pad);
+    const dBottom=Math.abs(baseY-(bh-pad));
+    const m=Math.min(dLeft,dRight,dTop,dBottom);
+    if(m===dTop) side='top';
+    else if(m===dBottom) side='bottom';
+    else if(m===dLeft) side='left';
+    else side='right';
+
+    let a,b;
+    if(side==='top' || side==='bottom'){
+      a = p1.x <= p2.x ? p1 : p2;
+      b = p1.x <= p2.x ? p2 : p1;
+    }else{
+      a = p1.y <= p2.y ? p1 : p2;
+      b = p1.y <= p2.y ? p2 : p1;
+    }
+
+    const num=n=>Number(n).toFixed(1);
+    const left=pad, right=bw-pad, top=pad, bottom=bh-pad;
+    const path=[];
+
+    const M=(x,y)=>path.push(`M ${num(x)} ${num(y)}`);
+    const L=(x,y)=>path.push(`L ${num(x)} ${num(y)}`);
+    const Q=(cx,cy,x,y)=>path.push(`Q ${num(cx)} ${num(cy)} ${num(x)} ${num(y)}`);
+
+    M(left+r, top);
+
+    if(side==='top'){
+      L(Math.max(left+r, Math.min(a.x, right-r)), top);
+      L(tip.x, tip.y);
+      L(Math.max(left+r, Math.min(b.x, right-r)), top);
+    }
+    L(right-r, top);
+    Q(right, top, right, top+r);
+
+    if(side==='right'){
+      L(right, Math.max(top+r, Math.min(a.y, bottom-r)));
+      L(tip.x, tip.y);
+      L(right, Math.max(top+r, Math.min(b.y, bottom-r)));
+    }
+    L(right, bottom-r);
+    Q(right, bottom, right-r, bottom);
+
+    if(side==='bottom'){
+      L(Math.max(left+r, Math.min(b.x, right-r)), bottom);
+      L(tip.x, tip.y);
+      L(Math.max(left+r, Math.min(a.x, right-r)), bottom);
+    }
+    L(left+r, bottom);
+    Q(left, bottom, left, bottom-r);
+
+    if(side==='left'){
+      L(left, Math.max(top+r, Math.min(b.y, bottom-r)));
+      L(tip.x, tip.y);
+      L(left, Math.max(top+r, Math.min(a.y, bottom-r)));
+    }
+    L(left, top+r);
+    Q(left, top, left+r, top);
+    path.push('Z');
+
+    bubbleShapePath.setAttribute('d', path.join(' '));
+  }
+
+  function resetBubblePointerStates(){
+    bubbleDragState=null;
+    bubbleResizeState=null;
+    bubble.classList.remove('dragging','resizing');
+  }
+
+  bubbleDragHandle.addEventListener('pointerdown',ev=>{
+    if(ev.button!==0) return;
+    ev.preventDefault();
+    bubbleManual=true;
+    bubbleDragState={
+      pointerId:ev.pointerId,
+      startX:ev.clientX,
+      startY:ev.clientY,
+      left:bubble.offsetLeft,
+      top:bubble.offsetTop
+    };
+    bubble.classList.add('dragging');
+    bubbleDragHandle.setPointerCapture(ev.pointerId);
+  });
+
+  bubbleDragHandle.addEventListener('pointermove',ev=>{
+    if(!bubbleDragState || ev.pointerId!==bubbleDragState.pointerId) return;
+    const wr=workspace.getBoundingClientRect();
+    const margin=8;
+    const nextLeft=bubbleDragState.left+(ev.clientX-bubbleDragState.startX);
+    const nextTop=bubbleDragState.top+(ev.clientY-bubbleDragState.startY);
+    bubble.style.left=Math.round(clamp(nextLeft,margin,Math.max(margin,wr.width-bubble.offsetWidth-margin)))+'px';
+    bubble.style.top=Math.round(clamp(nextTop,margin,Math.max(margin,wr.height-bubble.offsetHeight-margin)))+'px';
+    updateBubbleShape();
+  });
+
+  bubbleDragHandle.addEventListener('pointerup',ev=>{
+    if(!bubbleDragState || ev.pointerId!==bubbleDragState.pointerId) return;
+    try{bubbleDragHandle.releasePointerCapture(ev.pointerId)}catch{}
+    bubbleDragState=null;
+    bubble.classList.remove('dragging');
+    updateBubbleShape();
+  });
+
+  bubbleDragHandle.addEventListener('pointercancel',resetBubblePointerStates);
+
+  bubbleResizeHandle.addEventListener('pointerdown',ev=>{
+    if(ev.button!==0) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    bubbleManual=true;
+    bubbleResizeState={
+      pointerId:ev.pointerId,
+      startX:ev.clientX,
+      startY:ev.clientY,
+      width:bubble.offsetWidth,
+      height:bubble.offsetHeight
+    };
+    bubble.classList.add('resizing');
+    bubbleResizeHandle.setPointerCapture(ev.pointerId);
+  });
+
+  bubbleResizeHandle.addEventListener('pointermove',ev=>{
+    if(!bubbleResizeState || ev.pointerId!==bubbleResizeState.pointerId) return;
+    const wr=workspace.getBoundingClientRect();
+    const margin=8;
+    const maxW=Math.max(300,wr.width-bubble.offsetLeft-margin);
+    const maxH=Math.max(190,wr.height-bubble.offsetTop-margin);
+    const w=clamp(
+      bubbleResizeState.width+(ev.clientX-bubbleResizeState.startX),
+      300,maxW
+    );
+    const h=clamp(
+      bubbleResizeState.height+(ev.clientY-bubbleResizeState.startY),
+      190,maxH
+    );
+    bubble.style.width=Math.round(w)+'px';
+    bubble.style.height=Math.round(h)+'px';
+    updateBubbleShape();
+  });
+
+  bubbleResizeHandle.addEventListener('pointerup',ev=>{
+    if(!bubbleResizeState || ev.pointerId!==bubbleResizeState.pointerId) return;
+    try{bubbleResizeHandle.releasePointerCapture(ev.pointerId)}catch{}
+    bubbleResizeState=null;
+    bubble.classList.remove('resizing');
+    updateBubbleShape();
+  });
+
+  bubbleResizeHandle.addEventListener('pointercancel',resetBubblePointerStates);
+
+  // OCRやAIの文章量で内部レイアウトが変わっても三角形を追従
+  if('ResizeObserver' in window){
+    const bubbleObserver=new ResizeObserver(()=>updateBubbleShape());
+    bubbleObserver.observe(bubble);
   }
 
   window.addEventListener('resize',()=>{
-    if(!bubble.classList.contains('hidden')) positionBubble();
+    if(!bubble.classList.contains('hidden')){
+      if(bubbleManual) clampBubbleInsideWorkspace();
+      else positionBubble(true);
+      updateBubbleShape();
+    }
   });
 
   function escapeHTML(s){
