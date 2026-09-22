@@ -41,6 +41,14 @@
     font-weight:800;
     letter-spacing:-.02em;
   }
+  .brand-wrap{display:flex;align-items:center;gap:9px}
+  .qr-icon-btn{
+    width:34px;height:34px;border:1.5px solid #111;border-radius:10px;
+    background:#fff;display:grid;place-items:center;padding:6px;cursor:pointer;
+  }
+  .qr-icon-btn:hover{background:#111}
+  .qr-icon-btn:hover svg{stroke:#fff;fill:#fff}
+  .qr-icon-btn svg{width:100%;height:100%;stroke:#111;fill:#111;stroke-width:1.5}
   .header-actions{display:flex;align-items:center;gap:8px}
   .icon-btn,.capture-btn{
     border:1.5px solid #111;
@@ -164,6 +172,27 @@
     background:#d4d4d4;
   }
 
+  .bubble-resize-right{
+    position:absolute;
+    top:26px;
+    right:-4px;
+    width:10px;
+    bottom:24px;
+    cursor:ew-resize;
+    touch-action:none;
+    z-index:4;
+  }
+  .bubble-resize-bottom{
+    position:absolute;
+    left:26px;
+    right:24px;
+    bottom:-4px;
+    height:10px;
+    cursor:ns-resize;
+    touch-action:none;
+    z-index:4;
+  }
+
   .bubble-resize-handle{
     position:absolute;
     right:5px;
@@ -261,6 +290,23 @@
   }
   @keyframes spin{to{transform:rotate(360deg)}}
 
+  /* QRコードポップアップ */
+  .qr-modal-back{
+    position:fixed;inset:0;background:rgba(0,0,0,.32);z-index:110;
+    display:grid;place-items:center;padding:20px;
+  }
+  .qr-modal{
+    position:relative;background:#fff;border:2px solid #111;border-radius:24px;
+    box-shadow:10px 12px 0 rgba(0,0,0,.22);padding:24px 24px 18px;
+    width:min(520px,92vw);text-align:center;
+  }
+  .qr-large{display:block;width:min(420px,78vw);height:auto;margin:0 auto}
+  .qr-url{margin-top:12px;font-size:14px;font-weight:800;word-break:break-all}
+  .qr-close{
+    position:absolute;right:12px;top:12px;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid #111;background:#fff;font-size:20px;cursor:pointer;z-index:2;
+  }
+
   /* 設定モーダル */
   .modal-back{
     position:fixed;inset:0;
@@ -354,7 +400,17 @@
 </head>
 <body>
 <header>
-  <div class="brand">ことばをひらく</div>
+  <div class="brand-wrap">
+    <button id="qrBtn" class="qr-icon-btn" aria-label="QRコードを表示" title="このサイトのQRコードを表示">
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="2" y="2" width="7" height="7" rx="1"></rect>
+        <rect x="15" y="2" width="7" height="7" rx="1"></rect>
+        <rect x="2" y="15" width="7" height="7" rx="1"></rect>
+        <path d="M15 15h3v3h-3zM19 15h3v3h-3zM15 19h3v3h-3zM20 20h2v2h-2z"></path>
+      </svg>
+    </button>
+    <div class="brand">ことばをひらく</div>
+  </div>
   <div class="header-actions">
     <button id="captureBtn" class="capture-btn" title="共有画面を選んだ後このアプリへ戻ります。選択範囲の文章・数式・図をAIが画像からも読み取ります">画面を取り込む</button>
     <button id="settingsBtn" class="icon-btn" aria-label="設定" title="設定">⚙</button>
@@ -385,10 +441,20 @@
       <div class="bubble-body">
         <div id="bubbleText" class="bubble-text"></div>
       </div>
-      <div id="bubbleResizeHandle" class="bubble-resize-handle" title="ドラッグして吹き出しの大きさを変更"></div>
+      <div id="bubbleResizeRight" class="bubble-resize-right" title="右端をドラッグして幅を変更"></div>
+      <div id="bubbleResizeBottom" class="bubble-resize-bottom" title="下端をドラッグして高さを変更"></div>
+      <div id="bubbleResizeHandle" class="bubble-resize-handle" title="右下をドラッグして大きさを変更"></div>
     </div>
   </section>
 </main>
+
+<div id="qrModal" class="qr-modal-back hidden" role="dialog" aria-modal="true">
+  <div class="qr-modal">
+    <button id="closeQr" class="qr-close" aria-label="閉じる">×</button>
+    <img class="qr-large" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAV4AAAFeAQAAAADlUEq3AAACUUlEQVR4nO2bTY7bMAyFP9YGZqkAPcAcRblaj9Qb2EfpAQaQlwNYeF1I8k/QxUwGSVWUXBhO9C0e8MCQhBgTH4787eMsOOywww7/L3C2GpdcHsyXdj63s8fLcPgLsCRJE4OAQcSUDRYzCJKk9SkyHL4fnmuWIaVsdmWQ2atEydDLk2Q4/FU4m12XF+nHJZumZfxLMhz+RNyapPl1xeBFENLTZDh8N1wdjG0stJjyCOHNAEOU2pgfLMPhu2G2NgUIK5puHkeuE80On0LHWCEmqm9R681pJ5odPoVUjFo331RHivpg89Id7BE+OEhsQ6GUoIyC05HrRLPDp6h1MEj1Y6qZpymse/q5g73CpdKV13h421OSWhvdwT7hVgJL8ykR06Dm4NbJpME7mV7hzUFpt6weBenMdaLZ4VPsg0QbAIeSdCURi43B62C38HGaUOI4DwIQU21N3cFO4XaxtKVafZNa/+J1sG/4ME20KbBl414HvRftGD5c7mpi/wEdznnpdbBbeHOwDvOlF41trAe8DvYNj0AuV0wGw+ksvI1ANuK0jo+V4fDdsJ32RfMIDKttXwjyuD060ezwLbzvqgExZSu/pxPAfAHfk+kZ3ubBOlLsjc02x+N18B+A665aNmYbsWt4N+KvETMbsWu9KexLs8PA7abTUPabxDIiFhDL9xV4Nz1UhsN3w7e7ahZT6UpXg2GFsLI1Np1odvgP8H41yDKiKbwbMbUl/JieJMPhz8PbKAgQ8sh8GTBCO48/X1SzsRvNDh/D/P+DDjvssMNfgH8D1ZTvq27/lP8AAAAASUVORK5CYII=" alt="https://osaki2014.github.io/tsumari/ のQRコード">
+    <div class="qr-url">https://osaki2014.github.io/tsumari/</div>
+  </div>
+</div>
 
 <div id="settingsModal" class="modal-back hidden" role="dialog" aria-modal="true">
   <div class="modal">
@@ -471,8 +537,14 @@
   const actionButtons = $$('.word-btn');
   const bubbleDragHandle = $('#bubbleDragHandle');
   const bubbleResizeHandle = $('#bubbleResizeHandle');
+  const bubbleResizeRight = $('#bubbleResizeRight');
+  const bubbleResizeBottom = $('#bubbleResizeBottom');
   const bubbleShapeLayer = $('#bubbleShapeLayer');
   const bubbleShapePath = $('#bubbleShapePath');
+
+  const qrBtn = $('#qrBtn');
+  const qrModal = $('#qrModal');
+  const closeQr = $('#closeQr');
 
   const settingsBtn = $('#settingsBtn');
   const modal = $('#settingsModal');
@@ -1040,7 +1112,7 @@
     bubble.classList.remove('dragging','resizing');
   }
 
-  bubbleDragHandle.addEventListener('pointerdown',ev=>{
+  function startBubbleDrag(ev, captureEl){
     if(ev.button!==0) return;
     ev.preventDefault();
     bubbleManual=true;
@@ -1049,13 +1121,14 @@
       startX:ev.clientX,
       startY:ev.clientY,
       left:bubble.offsetLeft,
-      top:bubble.offsetTop
+      top:bubble.offsetTop,
+      captureEl
     };
     bubble.classList.add('dragging');
-    bubbleDragHandle.setPointerCapture(ev.pointerId);
-  });
+    try{captureEl.setPointerCapture(ev.pointerId)}catch{}
+  }
 
-  bubbleDragHandle.addEventListener('pointermove',ev=>{
+  function moveBubbleDrag(ev){
     if(!bubbleDragState || ev.pointerId!==bubbleDragState.pointerId) return;
     const wr=workspace.getBoundingClientRect();
     const margin=8;
@@ -1064,62 +1137,95 @@
     bubble.style.left=Math.round(clamp(nextLeft,margin,Math.max(margin,wr.width-bubble.offsetWidth-margin)))+'px';
     bubble.style.top=Math.round(clamp(nextTop,margin,Math.max(margin,wr.height-bubble.offsetHeight-margin)))+'px';
     updateBubbleShape();
-  });
+  }
 
-  bubbleDragHandle.addEventListener('pointerup',ev=>{
+  function endBubbleDrag(ev){
     if(!bubbleDragState || ev.pointerId!==bubbleDragState.pointerId) return;
-    try{bubbleDragHandle.releasePointerCapture(ev.pointerId)}catch{}
+    try{bubbleDragState.captureEl?.releasePointerCapture(ev.pointerId)}catch{}
     bubbleDragState=null;
     bubble.classList.remove('dragging');
     updateBubbleShape();
-  });
+  }
 
+  bubbleDragHandle.addEventListener('pointerdown',ev=>startBubbleDrag(ev,bubbleDragHandle));
+  bubbleDragHandle.addEventListener('pointermove',moveBubbleDrag);
+  bubbleDragHandle.addEventListener('pointerup',endBubbleDrag);
   bubbleDragHandle.addEventListener('pointercancel',resetBubblePointerStates);
 
-  bubbleResizeHandle.addEventListener('pointerdown',ev=>{
+  const bubbleToolbar=$('.bubble-toolbar');
+  bubbleToolbar.addEventListener('pointerdown',ev=>{
+    // ボタンそのものを押したときはAI操作。空白部分だけドラッグ移動。
+    if(ev.target.closest('button')) return;
+    startBubbleDrag(ev,bubbleToolbar);
+  });
+  bubbleToolbar.addEventListener('pointermove',moveBubbleDrag);
+  bubbleToolbar.addEventListener('pointerup',endBubbleDrag);
+  bubbleToolbar.addEventListener('pointercancel',resetBubblePointerStates);
+
+  function startBubbleResize(ev, mode, captureEl){
     if(ev.button!==0) return;
     ev.preventDefault();
     ev.stopPropagation();
     bubbleManual=true;
     bubbleResizeState={
       pointerId:ev.pointerId,
+      mode,
+      captureEl,
       startX:ev.clientX,
       startY:ev.clientY,
       width:bubble.offsetWidth,
       height:bubble.offsetHeight
     };
     bubble.classList.add('resizing');
-    bubbleResizeHandle.setPointerCapture(ev.pointerId);
-  });
+    try{captureEl.setPointerCapture(ev.pointerId)}catch{}
+  }
 
-  bubbleResizeHandle.addEventListener('pointermove',ev=>{
+  function moveBubbleResize(ev){
     if(!bubbleResizeState || ev.pointerId!==bubbleResizeState.pointerId) return;
     const wr=workspace.getBoundingClientRect();
     const margin=8;
     const maxW=Math.max(300,wr.width-bubble.offsetLeft-margin);
     const maxH=Math.max(190,wr.height-bubble.offsetTop-margin);
-    const w=clamp(
-      bubbleResizeState.width+(ev.clientX-bubbleResizeState.startX),
-      300,maxW
-    );
-    const h=clamp(
-      bubbleResizeState.height+(ev.clientY-bubbleResizeState.startY),
-      190,maxH
-    );
+
+    let w=bubbleResizeState.width;
+    let h=bubbleResizeState.height;
+
+    if(bubbleResizeState.mode==='right' || bubbleResizeState.mode==='corner'){
+      w=clamp(
+        bubbleResizeState.width+(ev.clientX-bubbleResizeState.startX),
+        300,maxW
+      );
+    }
+    if(bubbleResizeState.mode==='bottom' || bubbleResizeState.mode==='corner'){
+      h=clamp(
+        bubbleResizeState.height+(ev.clientY-bubbleResizeState.startY),
+        190,maxH
+      );
+    }
+
     bubble.style.width=Math.round(w)+'px';
     bubble.style.height=Math.round(h)+'px';
     updateBubbleShape();
-  });
+  }
 
-  bubbleResizeHandle.addEventListener('pointerup',ev=>{
+  function endBubbleResize(ev){
     if(!bubbleResizeState || ev.pointerId!==bubbleResizeState.pointerId) return;
-    try{bubbleResizeHandle.releasePointerCapture(ev.pointerId)}catch{}
+    try{bubbleResizeState.captureEl?.releasePointerCapture(ev.pointerId)}catch{}
     bubbleResizeState=null;
     bubble.classList.remove('resizing');
     updateBubbleShape();
-  });
+  }
 
-  bubbleResizeHandle.addEventListener('pointercancel',resetBubblePointerStates);
+  [
+    [bubbleResizeRight,'right'],
+    [bubbleResizeBottom,'bottom'],
+    [bubbleResizeHandle,'corner']
+  ].forEach(([el,mode])=>{
+    el.addEventListener('pointerdown',ev=>startBubbleResize(ev,mode,el));
+    el.addEventListener('pointermove',moveBubbleResize);
+    el.addEventListener('pointerup',endBubbleResize);
+    el.addEventListener('pointercancel',resetBubblePointerStates);
+  });
 
   // OCRやAIの文章量で内部レイアウトが変わっても三角形を追従
   if('ResizeObserver' in window){
@@ -1989,13 +2095,29 @@ OCRされた文字と元画像が食い違う場合は、元画像を優先し�
   providerSelect.addEventListener('change',syncProviderUI);
   syncProviderUI();
 
+  qrBtn.addEventListener('click',()=>{
+    qrModal.classList.remove('hidden');
+  });
+  closeQr.addEventListener('click',()=>{
+    qrModal.classList.add('hidden');
+  });
+  qrModal.addEventListener('click',ev=>{
+    if(ev.target===qrModal) qrModal.classList.add('hidden');
+  });
+
   settingsBtn.addEventListener('click',()=>openSettings());
   closeSettings.addEventListener('click',closeSettingsModal);
   modal.addEventListener('click',ev=>{
     if(ev.target===modal) closeSettingsModal();
   });
   document.addEventListener('keydown',ev=>{
-    if(ev.key==='Escape' && !modal.classList.contains('hidden')) closeSettingsModal();
+    if(ev.key==='Escape'){
+      if(!qrModal.classList.contains('hidden')){
+        qrModal.classList.add('hidden');
+      }else if(!modal.classList.contains('hidden')){
+        closeSettingsModal();
+      }
+    }
   });
 
   toggleKey.addEventListener('click',()=>{
