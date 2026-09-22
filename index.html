@@ -356,7 +356,7 @@
 <header>
   <div class="brand">ことばをひらく</div>
   <div class="header-actions">
-    <button id="captureBtn" class="capture-btn" title="共有する画面を選んだ後、このアプリへ自動的に戻ります">画面を取り込む</button>
+    <button id="captureBtn" class="capture-btn" title="共有画面を選んだ後このアプリへ戻ります。選択範囲の文章・数式・図をAIが画像からも読み取ります">画面を取り込む</button>
     <button id="settingsBtn" class="icon-btn" aria-label="設定" title="設定">⚙</button>
   </div>
 </header>
@@ -497,6 +497,10 @@
   let selection = null;
   let working = false;
 
+  // 数式・図・記号をAIが元画像から直接読めるように保持
+  let selectedCropCanvas = null;
+  let selectedCropDataUrl = '';
+
   let bubbleManual = false;
   let bubbleDragState = null;
   let bubbleResizeState = null;
@@ -528,6 +532,8 @@
   function resetState(){
     state = freshState();
     bubbleText.textContent = '';
+    selectedCropCanvas = null;
+    selectedCropDataUrl = '';
   }
 
   function nowISO(){
@@ -795,6 +801,12 @@
     setButtonsDisabled(true);
     try{
       const crop=makeCrop();
+
+      // OCR用画像を、そのままAIの視覚入力にも再利用する。
+      // Tesseractが苦手な数式・分数・指数・根号・図中記号はAIが画像から読む。
+      selectedCropCanvas = crop;
+      selectedCropDataUrl = crop.toDataURL('image/png');
+
       const out=await Tesseract.recognize(crop,'jpn+eng');
       const text=(out.data.text||'')
         .replace(/[ \t]+\n/g,'\n')
@@ -1499,9 +1511,52 @@ Web検索ツールが利用できない場合は、原文との比較と、あ�
     return new Error(msg || `Gemini API: HTTP ${res.status}`);
   }
 
+  function promptWithVisualContext(action){
+    return `${promptFor(action)}
+
+【選択範囲の画像について】
+この指示には、ユーザーが実際に矩形選択した元画像も一緒に渡します。
+OCRされた文字と元画像が食い違う場合は、元画像を優先してください。
+
+画像内に数式がある場合は、数式を単なる文字列として流さず、式の構造を正確に読み取ってください。
+特に次を注意して見てください：
+- 分数の分子・分母
+- 上付き・下付き文字
+- 2乗、3乗などの指数
+- 平方根・根号
+- 括弧
+- ＋、−、×、÷、＝、≠、＜、＞などの演算・関係記号
+- Σ、∫、π、θなどの数学記号
+- 添字
+- 表、グラフ、図と式の対応
+
+読み手の語彙・前提知識は小学5年生程度ですが、式そのものを勝手に簡単な別の式へ変えてはいけません。
+必要なら「この記号は〜を表します」のように、式を保ったまま意味を丁寧に説明してください。
+画像に数式がなければ、通常の文章として処理してください。`;
+  }
+
+  function hasSelectionImage(){
+    return !!selectedCropCanvas && !!selectedCropDataUrl;
+  }
+
+  function geminiImagePart(){
+    if(!selectedCropDataUrl) return null;
+    const comma=selectedCropDataUrl.indexOf(',');
+    if(comma<0) return null;
+    return {
+      inline_data:{
+        mime_type:'image/png',
+        data:selectedCropDataUrl.slice(comma+1)
+      }
+    };
+  }
+
   function chromeAIOptions(){
     return {
-      expectedInputs:[{type:'text',languages:['ja']}],
+      expectedInputs:[
+        {type:'text',languages:['ja']},
+        {type:'image'}
+      ],
       expectedOutputs:[{type:'text',languages:['ja']}]
     };
   }
@@ -1563,20 +1618,31 @@ Web検索ツールが利用できない場合は、原文との比較と、あ�
       }
     });
 
-    // promptStreamingを使い、生成された部分からすぐ吹き出しに表示する
+    const promptText=promptWithVisualContext(action);
+
+    // 数式を含む可能性があるので、矩形画像そのものをAIへ渡す。
+    const multimodalPrompt = hasSelectionImage()
+      ? [{
+          role:'user',
+          content:[
+            {type:'text',value:promptText},
+            {type:'image',value:selectedCropCanvas}
+          ]
+        }]
+      : promptText;
+
     if(typeof session.promptStreaming==='function'){
       let full='';
-      const stream=session.promptStreaming(promptFor(action));
+      const stream=session.promptStreaming(multimodalPrompt);
       for await (const chunk of stream){
         full += String(chunk||'');
-        // ストリーミング中も文章が読めるように逐次表示
         bubbleText.textContent=full;
       }
       if(!full.trim()) throw new Error('Chrome内蔵AIから文章が返りませんでした。');
       return full.trim();
     }
 
-    const text=await session.prompt(promptFor(action));
+    const text=await session.prompt(multimodalPrompt);
     if(!text || !String(text).trim()) throw new Error('Chrome内蔵AIから文章が返りませんでした。');
     return String(text).trim();
   }
@@ -1642,7 +1708,13 @@ Web検索ツールが利用できない場合は、原文との比較と、あ�
         'Content-Type':'application/json'
       },
       body:JSON.stringify({
-        contents:[{role:'user',parts:[{text:promptFor(action)}]}],
+        contents:[{
+          role:'user',
+          parts:[
+            {text:promptWithVisualContext(action)},
+            ...(geminiImagePart() ? [geminiImagePart()] : [])
+          ]
+        }],
         generationConfig:{temperature:action==='verify'?0.1:0.35}
       })
     });
@@ -1720,7 +1792,15 @@ Web検索ツールが利用できない場合は、原文との比較と、あ�
     const body={
       model:modelSelect.value,
       reasoning:{effort:'low'},
-      input:promptFor(action)
+      input: hasSelectionImage()
+        ? [{
+            role:'user',
+            content:[
+              {type:'input_text',text:promptWithVisualContext(action)},
+              {type:'input_image',image_url:selectedCropDataUrl,detail:'high'}
+            ]
+          }]
+        : promptWithVisualContext(action)
     };
     if(action==='verify') body.tools=[{type:'web_search'}];
 
@@ -1767,7 +1847,10 @@ Web検索ツールが利用できない場合は、原文との比較と、あ�
       const body={
         contents:[{
           role:'user',
-          parts:[{text:promptFor(action)}]
+          parts:[
+            {text:promptWithVisualContext(action)},
+            ...(geminiImagePart() ? [geminiImagePart()] : [])
+          ]
         }],
         generationConfig:{
           temperature: action==='verify' ? 0.1 : 0.35
