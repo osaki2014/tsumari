@@ -754,7 +754,7 @@
       </div>
       <div class="help-tip">
         <b>説明する学年を選べます</b>
-        <p>小学3年から中学3年までを設定できます。小3〜小6では最初のAI生成時に学年別漢字配当表の許可文字をすべて渡し、返答前にAI内部で照合します。専門用語に未習漢字がある場合は、用語全体を正しいひらがなにします。初期値は小学5年です。</p>
+        <p>小学3年から中学3年までを設定できます。小3〜小6では、1回のAI応答の中に学年用の本命文・専門用語の読み・全ひらがな予備文を作り、ブラウザ側でも配当漢字表を照合します。未習漢字が残れば自動で安全な文へ切り替えます。初期値は小学5年です。</p>
       </div>
       <div class="help-tip">
         <b>設定ではAIと履歴を管理できます</b>
@@ -820,7 +820,7 @@
       <div class="grade-note">
         文部科学省の現行学習指導要領（平成29年告示）国語を基準に、
         漢字・熟語・語彙・文の構成・表現技法をこの学年までに合わせます。
-        小3〜小6は、最初のAI生成時にその学年までの配当漢字を完全な許可リストとして渡し、AIが返答前に1文字ずつ内部確認します。
+        小3〜小6は、1回のAI生成で「配当漢字内の本命文」と「全ひらがなの予備文」を同時に作ります。ブラウザ側が本命文を配当漢字表で照合し、未習漢字が残れば2回目のAI呼び出しなしで予備文へ切り替えます。
       </div>
     </div>
 
@@ -2333,6 +2333,164 @@ ${selected ? '今回は反転選択された部分を中心に検証してくだ
     return new Error(msg || `Gemini API: HTTP ${res.status}`);
   }
 
+  function gradeSinglePassOutputSpec(){
+    const grade=currentGradeValue();
+    if(grade>6) return '';
+
+    const allowed=[...(PRIMARY_CUMULATIVE_KANJI[grade] || [])].join('');
+
+    return `
+
+【最終出力形式：小学校設定では必須】
+この回答は、1回の生成の中で次の3ブロックを必ず作ってください。
+この3ブロック以外の文字は出力しないでください。
+
+<SAFE>
+ここに、読み手へ見せる本命の説明を書きます。
+</SAFE>
+
+<YOMI>
+本命の説明の中で、未習漢字を含むため「用語全体をひらがな」にした専門用語がある場合だけ、
+1行に1語ずつ「元の用語=ひらがなの読み」の形で書きます。
+無ければ空欄にします。
+例：
+裸子植物=らししょくぶつ
+被子植物=ひししょくぶつ
+</YOMI>
+
+<KANA>
+<SAFE>と同じ意味・同じ内容の説明を、漢字を1字も使わず、すべてひらがな中心で書きます。
+数字、英字、数式記号、句読点はそのままでかまいません。
+</KANA>
+
+【SAFEで使ってよい漢字の完全な許可リスト】
+${allowed}
+
+SAFEの厳守事項：
+- 上の許可リストに無い漢字は1字も使わないでください。
+- 「種類」のように、許可リスト外の漢字を含む普通の語は、その学年までの別のやさしい言葉へ置き換えてください。
+- 専門用語・分類名・正式名称など、別の言葉にすると正確さが失われる語に未習漢字がある場合は、その語全体を正しいひらがなにしてください。
+- 「ら子植物」のような混ぜ書きは禁止です。
+- SAFEを書いたあと、同じ生成処理の中で漢字を1文字ずつ上の許可リストと照合してから出力してください。
+
+KANAの厳守事項：
+- 漢字は1字も使わないでください。
+- SAFEと意味を変えないでください。
+- 専門用語も正しい読みのひらがなで書いてください。
+
+ブラウザ側でもSAFEを配当漢字表と機械照合します。
+SAFEに未習漢字が残っていた場合、YOMIの置換を試し、それでも残る場合はKANAが表示されます。
+そのためKANAは必ず正しく作ってください。`;
+  }
+
+  function parseGradeEnvelope(raw){
+    const text=String(raw||'').trim();
+    const get=(tag)=>{
+      const m=text.match(new RegExp(`<${tag}>\\\\s*([\\\\s\\\\S]*?)\\\\s*</${tag}>`,'i'));
+      return m ? m[1].trim() : '';
+    };
+
+    const safe=get('SAFE');
+    const kana=get('KANA');
+    const yomiRaw=get('YOMI');
+
+    const yomi=[];
+    if(yomiRaw){
+      for(const line of yomiRaw.split(/\r?\n/)){
+        const m=line.match(/^\s*(.+?)\s*[=＝]\s*(.+?)\s*$/);
+        if(!m) continue;
+        const surface=m[1].trim();
+        const reading=m[2].trim();
+        if(surface && reading) yomi.push({surface,reading});
+      }
+    }
+
+    return {safe,kana,yomi,raw:text};
+  }
+
+  function applyYomiMap(text,yomi,grade=currentGradeValue()){
+    let out=String(text||'');
+    const pairs=[...(yomi||[])].sort((a,b)=>b.surface.length-a.surface.length);
+
+    for(const {surface,reading} of pairs){
+      if(!surface || !reading || !out.includes(surface)) continue;
+
+      // 未習漢字を含む用語だけを対象にする。
+      if(disallowedKanji(surface,grade).length===0) continue;
+
+      // 読み側に漢字が残る不正なマップは使わない。
+      if([...reading].some(ch=>isHanCharacter(ch))) continue;
+
+      out=out.split(surface).join(reading);
+    }
+    return out;
+  }
+
+  function resolveSinglePassGradeText(raw){
+    const grade=currentGradeValue();
+    const original=String(raw||'').trim();
+
+    if(grade>6){
+      return {
+        text:original,
+        mode:'middle-school',
+        invalid:[],
+        envelope:false
+      };
+    }
+
+    const env=parseGradeEnvelope(original);
+    let safe=(env.safe || original).trim();
+
+    // まず本命文をそのまま検査。
+    let invalid=disallowedKanji(safe,grade);
+    if(invalid.length===0){
+      return {
+        text:safe,
+        mode:'safe',
+        invalid:[],
+        envelope:!!env.safe
+      };
+    }
+
+    // 同じ1回の生成で返された読みマップを使い、
+    // 専門用語だけを全体ひらがなへ置換する。
+    if(env.yomi.length){
+      const patched=applyYomiMap(safe,env.yomi,grade).trim();
+      const patchedInvalid=disallowedKanji(patched,grade);
+      if(patched && patchedInvalid.length===0){
+        return {
+          text:patched,
+          mode:'safe+yomi',
+          invalid:[],
+          envelope:true
+        };
+      }
+      safe=patched || safe;
+      invalid=patchedInvalid;
+    }
+
+    // それでも未習漢字がある場合は、同じAI応答内の全ひらがな版へ切替。
+    const kana=(env.kana||'').trim();
+    if(kana && disallowedKanji(kana,grade).length===0){
+      return {
+        text:kana,
+        mode:'kana-fallback',
+        invalid:[],
+        envelope:true
+      };
+    }
+
+    // AIが最終形式自体を守らなかった場合でも、二度目のAIは呼ばない。
+    // 未習漢字入りの文章を出すより、学年安全な固定文を表示する。
+    return {
+      text:'うまく ことばを かえられませんでした。もういちど おしてください。',
+      mode:'safe-static-fallback',
+      invalid,
+      envelope:!!(env.safe||env.kana)
+    };
+  }
+
   function promptWithVisualContext(action, selectedText=''){
     return `${promptFor(action, selectedText)}
 
@@ -2360,7 +2518,8 @@ ${selected ? '今回は反転選択された部分を中心に検証してくだ
 「選択された文章だけでは、その内容までは分かりません」のように明示してください。
 
 数式がある場合も、画像は式を正確に読むためだけに使い、
-式の意味の説明はOCRされた文章と、その式の記述だけを根拠にしてください。`;
+式の意味の説明はOCRされた文章と、その式の記述だけを根拠にしてください。
+${gradeSinglePassOutputSpec()}`;
   }
 
   function structuredVisualLikeText(text){
@@ -2484,7 +2643,10 @@ ${selected ? '今回は反転選択された部分を中心に検証してくだ
       const stream=session.promptStreaming(multimodalPrompt);
       for await (const chunk of stream){
         full += String(chunk||'');
-        bubbleText.textContent=full;
+        // 小学校設定では、SAFE/KANAの検査前の生データは表示しない。
+        if(currentGradeValue()>6){
+          bubbleText.textContent=full;
+        }
       }
       if(!full.trim()) throw new Error('Chrome内蔵AIから文章が返りませんでした。');
       if(action==='verify'){
@@ -3122,20 +3284,17 @@ ${selected ? '今回は反転選択された部分を中心に検証してくだ
       try{
         const rawOutput=await callAI(action, selectedText);
         const result=normalizeAIResult(rawOutput);
-        const output=result.text;
 
-        // 学年別漢字配当表は最初のAI生成プロンプトに完全な許可リストとして渡している。
-        // 2回目のAI呼び出しは行わない。
-        // 下記は通信を伴わないローカル監査で、デバッグ用にConsoleへ警告するだけ。
-        if(currentGradeValue()<=6){
-          const localAudit=disallowedKanji(output,currentGradeValue());
-          if(localAudit.length){
-            console.warn(
-              `[学年漢字監査] ${currentGradeLabel()}の許可リスト外の漢字がAI出力に残りました:`,
-              localAudit.join('、')
-            );
-          }
+        const gradeResolved=resolveSinglePassGradeText(result.text);
+        result.text=gradeResolved.text;
+
+        // 本文を書き換えた場合、検索引用の文字位置は一致しなくなるため本文内引用だけ外す。
+        // 下部の参照資料リンクは保持する。
+        if(gradeResolved.mode!=='safe' && gradeResolved.mode!=='middle-school'){
+          result.citations=[];
         }
+
+        const output=result.text;
 
         state.currentText=output;
         state.history.push({
@@ -3163,7 +3322,7 @@ ${selected ? '今回は反転選択された部分を中心に検証してくだ
         const extra=[
           selectedText ? '吹き出し内の反転選択部分のみを対象' : '',
           action==='verify' ? (result.searched ? '外部資料検索あり' : '外部資料検索なし') : '',
-          currentGradeValue()<=6 ? '初回生成時に学年別漢字許可リストを適用' : '中学校学年設定を適用',
+          currentGradeValue()<=6 ? `単一AI生成・学年漢字処理: ${gradeResolved.mode}` : '中学校学年設定を適用',
           sourceSummary
         ].filter(Boolean).join(' | ');
 
