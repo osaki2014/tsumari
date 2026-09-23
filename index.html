@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ことばをひらく</title>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/build/kuromoji.js"></script>
 <style>
   :root{
     --bg:#f6f6f3;
@@ -755,7 +754,7 @@
       </div>
       <div class="help-tip">
         <b>説明する学年を選べます</b>
-        <p>小学3年から中学3年までを設定できます。小3〜小6ではAIの生成後にブラウザ内の日本語辞書で読みを確認し、配当漢字表と1文字ずつ照合します。未習漢字を含む専門用語や熟語は語全体を正しいひらがなへ変えます。AIの再呼び出しはありません。初期値は小学5年です。</p>
+        <p>小学3年から中学3年までを設定できます。小3〜小6ではAIの生成後、別スレッドの日本語辞書で読みを確認し、配当漢字表と照合します。重い辞書処理を画面とは別に動かすため、操作を止めません。AIの再呼び出しはありません。初期値は小学5年です。</p>
       </div>
       <div class="help-tip">
         <b>設定ではAIと履歴を管理できます</b>
@@ -821,7 +820,7 @@
       <div class="grade-note">
         文部科学省の現行学習指導要領（平成29年告示）国語を基準に、
         漢字・熟語・語彙・文の構成・表現技法をこの学年までに合わせます。
-        小3〜小6は、AIを1回だけ使ったあと、ブラウザ内の日本語辞書で単語の読みを確認し、学年別漢字配当表と機械照合します。未習漢字を含む語は、AIを再度呼ばずに正しいひらがなへ変換します。
+        小3〜小6は、AIを1回だけ使ったあと、別スレッドで動く日本語辞書が単語の読みを確認し、学年別漢字配当表と照合します。辞書の準備中も画面操作は止まりません。未習漢字を含む語は、AIを再度呼ばず正しいひらがなへ変換します。
       </div>
     </div>
 
@@ -2334,7 +2333,195 @@ ${selected ? '今回は反転選択された部分を中心に検証してくだ
     return new Error(msg || `Gemini API: HTTP ${res.status}`);
   }
 
-  let gradeTokenizerPromise=null;
+
+  // 学年別漢字の読み変換は、画面を止めないよう Web Worker で実行する。
+  let gradeWorker=null;
+  let gradeWorkerUrl='';
+  let gradeWorkerReadyPromise=null;
+  let gradeWorkerReadyResolve=null;
+  let gradeWorkerReadyReject=null;
+  let gradeWorkerSeq=0;
+  const gradeWorkerPending=new Map();
+
+  function timeoutPromise(ms,message){
+    return new Promise((_,reject)=>{
+      setTimeout(()=>reject(new Error(message)),ms);
+    });
+  }
+
+  function createGradeWorker(){
+    if(gradeWorker) return gradeWorker;
+
+    const workerSource=`
+      let tokenizer=null;
+      let building=false;
+      let ready=false;
+      const waiting=[];
+
+      function fatal(message){
+        postMessage({type:'fatal',message:String(message||'日本語辞書の準備に失敗しました。')});
+      }
+
+      function buildTokenizer(){
+        if(ready || building) return;
+        building=true;
+
+        try{
+          importScripts('https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/build/kuromoji.js');
+        }catch(e){
+          fatal('日本語解析ライブラリを読み込めませんでした。');
+          return;
+        }
+
+        try{
+          kuromoji.builder({
+            dicPath:'https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/dict/'
+          }).build((err,t)=>{
+            if(err){
+              fatal('日本語辞書を準備できませんでした。');
+              return;
+            }
+
+            tokenizer=t;
+            ready=true;
+            building=false;
+            postMessage({type:'ready'});
+
+            while(waiting.length){
+              tokenize(waiting.shift());
+            }
+          });
+        }catch(e){
+          fatal(e && e.message ? e.message : '日本語辞書を準備できませんでした。');
+        }
+      }
+
+      function tokenize(job){
+        if(!ready || !tokenizer){
+          waiting.push(job);
+          buildTokenizer();
+          return;
+        }
+
+        try{
+          const tokens=tokenizer.tokenize(String(job.text||''));
+          postMessage({type:'result',id:job.id,tokens});
+        }catch(e){
+          postMessage({
+            type:'error',
+            id:job.id,
+            message:e && e.message ? e.message : '日本語の読み取りに失敗しました。'
+          });
+        }
+      }
+
+      onmessage=(ev)=>{
+        const msg=ev.data||{};
+        if(msg.type==='init'){
+          buildTokenizer();
+          return;
+        }
+        if(msg.type==='tokenize'){
+          tokenize({id:msg.id,text:msg.text});
+        }
+      };
+    `;
+
+    const blob=new Blob([workerSource],{type:'text/javascript'});
+    gradeWorkerUrl=URL.createObjectURL(blob);
+    gradeWorker=new Worker(gradeWorkerUrl);
+
+    gradeWorkerReadyPromise=new Promise((resolve,reject)=>{
+      gradeWorkerReadyResolve=resolve;
+      gradeWorkerReadyReject=reject;
+    });
+
+    gradeWorker.onmessage=(ev)=>{
+      const msg=ev.data||{};
+
+      if(msg.type==='ready'){
+        gradeWorkerReadyResolve?.(true);
+        return;
+      }
+
+      if(msg.type==='fatal'){
+        const error=new Error(msg.message||'日本語辞書の準備に失敗しました。');
+        gradeWorkerReadyReject?.(error);
+        for(const pending of gradeWorkerPending.values()){
+          pending.reject(error);
+        }
+        gradeWorkerPending.clear();
+        return;
+      }
+
+      if(msg.type==='result'){
+        const pending=gradeWorkerPending.get(msg.id);
+        if(!pending) return;
+        gradeWorkerPending.delete(msg.id);
+        pending.resolve(msg.tokens||[]);
+        return;
+      }
+
+      if(msg.type==='error'){
+        const pending=gradeWorkerPending.get(msg.id);
+        if(!pending) return;
+        gradeWorkerPending.delete(msg.id);
+        pending.reject(new Error(msg.message||'日本語の読み取りに失敗しました。'));
+      }
+    };
+
+    gradeWorker.onerror=(ev)=>{
+      const error=new Error('学年別漢字の日本語辞書を起動できませんでした。');
+      gradeWorkerReadyReject?.(error);
+      for(const pending of gradeWorkerPending.values()){
+        pending.reject(error);
+      }
+      gradeWorkerPending.clear();
+      console.error('grade worker error',ev);
+    };
+
+    gradeWorker.postMessage({type:'init'});
+    return gradeWorker;
+  }
+
+  async function ensureGradeWorkerReady(){
+    createGradeWorker();
+    return Promise.race([
+      gradeWorkerReadyPromise,
+      timeoutPromise(
+        25000,
+        '学年別漢字の日本語辞書の準備に時間がかかっています。少し待ってから、もう一度ボタンを押してください。'
+      )
+    ]);
+  }
+
+  async function tokenizeInGradeWorker(text){
+    const worker=createGradeWorker();
+    await ensureGradeWorkerReady();
+
+    const id=++gradeWorkerSeq;
+    const resultPromise=new Promise((resolve,reject)=>{
+      gradeWorkerPending.set(id,{resolve,reject});
+    });
+
+    worker.postMessage({
+      type:'tokenize',
+      id,
+      text:String(text||'')
+    });
+
+    try{
+      return await Promise.race([
+        resultPromise,
+        timeoutPromise(
+          12000,
+          '学年別漢字の読み確認に時間がかかっています。もう一度お試しください。'
+        )
+      ]);
+    }finally{
+      gradeWorkerPending.delete(id);
+    }
+  }
 
   function katakanaToHiragana(text){
     return String(text||'').replace(/[\u30a1-\u30f6]/g,ch=>
@@ -2359,30 +2546,6 @@ ${selected ? '今回は反転選択された部分を中心に検証してくだ
 
   function nounLikeToken(token){
     return token?.pos==='名詞' || token?.pos==='接頭詞';
-  }
-
-  async function getGradeTokenizer(){
-    if(gradeTokenizerPromise) return gradeTokenizerPromise;
-
-    gradeTokenizerPromise=new Promise((resolve,reject)=>{
-      if(!window.kuromoji){
-        reject(new Error('学年別漢字の読み変換ライブラリを読み込めませんでした。ページを再読み込みしてください。'));
-        return;
-      }
-
-      kuromoji.builder({
-        dicPath:'https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/dict/'
-      }).build((err,tokenizer)=>{
-        if(err){
-          gradeTokenizerPromise=null;
-          reject(new Error('学年別漢字の日本語辞書を準備できませんでした。インターネット接続を確認してください。'));
-          return;
-        }
-        resolve(tokenizer);
-      });
-    });
-
-    return gradeTokenizerPromise;
   }
 
   function reconstructTokenReading(tokens,startIndex,endIndex){
@@ -2438,8 +2601,7 @@ ${selected ? '今回は反転選択された部分を中心に検証してくだ
         `<span class="loading-row"><span class="spinner"></span>${escapeHTML(GRADE_LABELS[grade])}までの漢字に整えています…</span>`;
     }
 
-    const tokenizer=await getGradeTokenizer();
-    const tokens=tokenizer.tokenize(original);
+    const tokens=await tokenizeInGradeWorker(original);
 
     let out='';
     let cursor=0;
@@ -3398,9 +3560,13 @@ ${selected ? '今回は反転選択された部分を中心に検証してくだ
         if(e.message!=='API Key未設定'){
           if(e.kind==='billing'){
             await replaceBubbleText('OpenAI API Keyは届いていますが、API残高がありません。\n\n⚙ 設定でGeminiに切り替えることもできます。');
-          }else if(e.kind==='grade-reading'){
+          }else if(
+            e.kind==='grade-reading' ||
+            /学年別漢字|日本語辞書|読み確認/.test(String(e.message||''))
+          ){
             await replaceBubbleText(
-              '学年に合わせた漢字の読み変換を完了できませんでした。\n\n'+e.message
+              '学年に合わせるための漢字確認を完了できませんでした。\n\n'+
+              String(e.message||'少し待ってから、もう一度お試しください。')
             );
           }else{
             const aiName=providerName();
@@ -3427,11 +3593,31 @@ ${selected ? '今回は反転選択された部分を中心に検証してくだ
   syncProviderUI();
   updateGradeUI();
 
+  const preloadGradeDictionary=()=>{
+    if(currentGradeValue()>6) return;
+    ensureGradeWorkerReady().catch(err=>{
+      console.warn('学年別漢字辞書の事前準備:',err.message);
+    });
+  };
+
+  if('requestIdleCallback' in window){
+    requestIdleCallback(preloadGradeDictionary,{timeout:3000});
+  }else{
+    setTimeout(preloadGradeDictionary,1200);
+  }
+
+
   gradeSlider.addEventListener('input',()=>{
     explanationGrade=Number(gradeSlider.value);
     try{localStorage.setItem('kotobaHirakuGrade',String(explanationGrade))}catch(_e){}
     updateGradeUI();
     settingsState.textContent=`説明学年：${currentGradeLabel()} に設定しました。`;
+
+    if(explanationGrade<=6){
+      ensureGradeWorkerReady().catch(err=>{
+        console.warn('学年別漢字辞書:',err.message);
+      });
+    }
   });
 
   helpBtn.addEventListener('click',()=>{
@@ -3541,6 +3727,14 @@ ${selected ? '今回は反転選択された部分を中心に検証してくだ
   canvas.height=720;
   draw();
 })();
+
+  window.addEventListener('beforeunload',()=>{
+    try{gradeWorker?.terminate()}catch(_e){}
+    try{
+      if(gradeWorkerUrl) URL.revokeObjectURL(gradeWorkerUrl);
+    }catch(_e){}
+  });
+
 </script>
 </body>
 </html>
