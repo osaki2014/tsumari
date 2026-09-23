@@ -283,6 +283,109 @@
   .loading-row{
     display:inline-flex;align-items:center;gap:8px;color:#555;font-size:14px
   }
+  .verification-answer{
+    white-space:pre-wrap;
+    overflow-wrap:anywhere;
+  }
+  .verify-citation{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    min-width:19px;
+    height:19px;
+    margin:0 2px;
+    padding:0 5px;
+    border:1px solid #111;
+    border-radius:999px;
+    background:#fff;
+    color:#111;
+    font-size:10px;
+    font-weight:900;
+    line-height:1;
+    text-decoration:none;
+    vertical-align:super;
+    cursor:pointer;
+  }
+  .verify-citation:hover{
+    background:#111;
+    color:#fff;
+  }
+  .verification-sources{
+    margin-top:16px;
+    padding-top:13px;
+    border-top:1px solid #d8d8d8;
+    white-space:normal;
+  }
+  .verification-sources-title{
+    margin-bottom:8px;
+    font-size:12px;
+    font-weight:900;
+  }
+  .verification-source{
+    display:grid;
+    grid-template-columns:25px 1fr;
+    gap:7px;
+    align-items:start;
+    margin:6px 0;
+    padding:7px 8px;
+    border:1px solid #ddd;
+    border-radius:10px;
+    background:#fafafa;
+  }
+  .verification-source-number{
+    display:grid;
+    place-items:center;
+    width:23px;
+    height:23px;
+    border-radius:50%;
+    background:#111;
+    color:#fff;
+    font-size:10px;
+    font-weight:900;
+  }
+  .verification-source-main{
+    min-width:0;
+  }
+  .verification-source-link{
+    display:block;
+    color:#125b82;
+    font-size:11px;
+    line-height:1.45;
+    font-weight:800;
+    text-decoration:underline;
+    text-underline-offset:2px;
+    cursor:pointer;
+    overflow-wrap:anywhere;
+  }
+  .verification-source-meta{
+    display:flex;
+    flex-wrap:wrap;
+    gap:5px;
+    margin-top:3px;
+    color:#777;
+    font-size:9px;
+  }
+  .source-kind{
+    display:inline-block;
+    padding:2px 6px;
+    border:1px solid #bbb;
+    border-radius:999px;
+    background:#fff;
+    color:#555;
+    font-size:9px;
+    font-weight:800;
+  }
+  .verification-search-note{
+    margin-top:12px;
+    padding:8px 10px;
+    border:1px solid #d4d4d4;
+    border-radius:10px;
+    background:#f7f7f4;
+    color:#666;
+    font-size:10px;
+    line-height:1.6;
+    white-space:normal;
+  }
   .spinner{
     width:15px;height:15px;border-radius:50%;
     border:2px solid #ccc;border-top-color:#111;
@@ -482,7 +585,7 @@
     <div class="brand">ことばをひらく</div>
   </div>
   <div class="header-actions">
-    <button id="captureBtn" class="capture-btn" title="共有画面を選んだ後このアプリへ戻ります。AIの回答対象は矩形内のOCR文章だけです。数式時のみ矩形画像を読み取り補助に使います">画面を取り込む</button>
+    <button id="captureBtn" class="capture-btn" title="共有画面を選んだ後このアプリへ戻ります。AIの回答対象は矩形内です。数式・グラフ・表・図がある場合は矩形画像を読み取り補助に使います">画面を取り込む</button>
     <button id="helpBtn" class="icon-btn" aria-label="ヘルプ" title="使い方・各ボタンの説明">?</button>
     <button id="settingsBtn" class="icon-btn" aria-label="設定" title="設定">⚙</button>
   </div>
@@ -551,7 +654,7 @@
       </div>
       <div class="help-card">
         <div class="help-button-sample">ほんとうに？</div>
-        <div><b>最初の文章と照らして確かめます</b><p>今の説明が元の文章からずれていないかを確認します。ずれがあれば丁寧に訂正します。設定によっては検索で事実確認もできます。</p></div>
+        <div><b>原文と外部資料の両方から確かめます</b><p>まず今の説明が最初の原文からずれていないか確認します。次に、検索対応AIでは学術研究、公的機関、辞書・事典、主要報道機関などを優先して原文の事実関係を外部資料でも確認し、参照資料をリンク付きで表示します。</p></div>
       </div>
       <div class="help-card">
         <div class="help-button-sample">わかった</div>
@@ -570,7 +673,7 @@
       </div>
       <div class="help-tip">
         <b>数式・記号・図がある範囲も選べます</b>
-        <p>通常の文章は矩形内でOCRしたテキストだけをAIに渡します。数式がある場合だけ、同じ矩形の切り抜き画像を数式・記号の読み取り補助として使います。画面全体や矩形外の写真・文章は回答に使いません。</p>
+        <p>通常の文章は矩形内でOCRしたテキストだけをAIに渡します。数式・グラフ・表・図がある場合は、同じ矩形の切り抜き画像も読み取り補助として使います。画面全体や矩形外の写真・文章は回答に使いません。</p>
       </div>
       <div class="help-tip">
         <b>吹き出しは自由に動かせます</b>
@@ -629,8 +732,8 @@
     <div id="searchGroundingField" class="field">
       <label>「ほんとうに？」のWeb確認</label>
       <label style="display:flex;align-items:flex-start;gap:8px;font-weight:500;line-height:1.5">
-        <input id="useSearchGrounding" type="checkbox" style="width:auto;margin-top:3px">
-        <span>Google検索も使う <small style="display:block;color:#777;margin-top:3px">Geminiの有料API枠向けです。無料枠ではOFFのまま使ってください。</small></span>
+        <input id="useSearchGrounding" type="checkbox" checked style="width:auto;margin-top:3px">
+        <span>「ほんとうに？」で外部資料を検索する <small style="display:block;color:#777;margin-top:3px">検索対応Geminiでは自動的に外部資料を確認します。無料枠では検索上限に達すると検索なしへ切り替わります。</small></span>
       </label>
     </div>
 
@@ -1437,10 +1540,12 @@
 
 大切なルール：
 - 言葉遣いは、丁寧で落ち着いた「です・ます」調にする。
+- もし選択範囲内にグラフや表があるときは、項目名、軸、数値、増減、比較関係が分かるように説明する。
 - 子ども扱いする話し方、幼児語、くだけすぎた言い方は使わない。
 - 難しい専門語や抽象語はできるだけ避ける。
 - 必要な専門語を使う場合は、その場で短く意味を説明する。
 - 元の文章にない事実を勝手に追加しない。
+- 矩形選択の内側にあるグラフ・表・図の内容は扱ってよい。
 - 選択範囲の外側にある写真・図・投稿・見出し・周辺画面の内容を推測しない。
 - 「この写真」「この図」「それ」などの参照先が選択文の中に無ければ、勝手に補わない。
 - 元の意味や大切な条件は変えない。
@@ -1539,10 +1644,11 @@ ${current}${scopeNote}`;
 ${current}${scopeNote}`;
     }
 
-    return `あなたは、文章の内容が正しいかを丁寧に確かめる先生です。
+    return `あなたは、文章の意味と事実関係を丁寧に検証する先生です。
 読み手の知識量と語彙は、おおむね小学5年生までを前提にしてください。
 
 読み手が「ほんとうに？」とたずねました。
+このボタンでは、必ず次の2段階で考えてください。
 
 【最初にOCRで読んだ原文】
 ${original}
@@ -1558,20 +1664,37 @@ ${actionName(previousAction)}
 【その質問をする前に表示されていた文章】
 ${previousInput}
 
-まず内部で、${selected ? '反転選択された部分' : '現在の文章'}が最初の原文の意味や条件からずれていないか確認してください。
-Web検索ツールが実際に利用できる場合だけ、必要に応じて一般的な事実や具体例も確かめてください。
-Web検索ツールが利用できない場合は、原文との比較と、あなたが持つ安定した知識の範囲で確認してください。
-検索していないのに「検索した」「調べた」とは書かないでください。
+第1段階「原文との比較」：
+${selected ? '反転選択された部分' : '現在の説明'}が、最初の原文の意味・条件・因果関係からずれていないか確認してください。
+ずれ、言いすぎ、誤解を招く省略があれば、どこが問題かを簡潔に示してください。
 
-そのうえで、「ほんとうに？」という問いへの返答として、丁寧な「です・ます」調で答えてください。
-${selected ? '今回は反転選択された部分についての検証結果だけを返してください。ただし判断の基準は最初の原文です。' : ''}
+第2段階「外部資料による事実確認」：
+Web検索ツールが利用できる場合は、最初の原文に含まれる主要な事実関係を、矩形内の情報だけで判断せず外部資料でも確認してください。
+検索では、できるだけ次の順に信頼性の高い資料を優先してください。
+1. 査読論文、学術誌、学会、大学・研究機関
+2. 国・自治体・公的研究機関、国際機関、公式統計、一次資料
+3. 辞書・事典・専門機関の解説
+4. 編集体制のある主要新聞社・通信社・公共放送
+複数の独立した資料で確認できる場合は、できるだけ照合してください。
+個人ブログ、SNS投稿、匿名まとめサイト、広告目的のページは、主要な根拠として使わないでください。
 
-ルール：
-- 内容が合っている場合は、「はい。〜」のように、なぜそう言えるのかを短く説明する。
-- 少し言いすぎていたり、意味がずれていた場合は、「先ほどの説明は少し正確ではありませんでした。」のように丁寧に認め、その後で正しく言い直す。
+外部資料が原文を支持する場合は、その点を分かりやすく補強してください。
+一部しか支持しない場合、資料によって見解が異なる場合、十分な資料が見つからない場合、原文と食い違う場合は、その不確かさを隠さず説明してください。
+「正しい／間違い」と単純化しすぎず、「確認できる」「おおむね支持される」「一部は確認できない」「資料と食い違う」など、証拠に応じた表現を使ってください。
+
+返答は次の順で、短い見出しを使ってください。
+原文との比較：
+外部資料での確認：
+まとめ：
+
+${selected ? '今回は反転選択された部分を中心に検証してください。ただし、外部資料との比較では、その部分に関係する最初の原文の事実関係を基準にしてください。' : ''}
+
+重要：
+- 検索していないのに「調べた」「資料で確認した」と書かない。
+- 出典URLを本文中に自分で作ったり推測したりしない。リンクはアプリ側が検索結果のメタデータから表示する。
+- 情報源の名前は本文中で自然に触れてよいが、URL一覧は本文に書かない。
 - 「うん」「ごめん」「〜なんだよ」など、くだけた言い方は使わない。
-- URL、出典一覧、検証手順、Markdownは出さない。
-- 吹き出しにそのまま表示できる返答本文だけを書く。`;
+- 丁寧な「です・ます」調にする。`;
   }
 
   const providerModels = {
@@ -1685,8 +1808,9 @@ ${selected ? '今回は反転選択された部分についての検証結果だ
         </ol>
         <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio の API Keys を開く ↗</a>
         <div class="free-note">
-          このモードでは「ほんとうに？」もGoogle検索を呼ばず、元の文章との比較で確認します。
-          無料枠の回数制限に達した場合は429になりますが、課金設定のないFree Tierなら超過分が自動課金されることはありません。
+          「ほんとうに？」では外部資料検索も試します。検索利用枠やプロジェクト設定で検索できない場合は、
+          自動的に検索なしへ切り替え、最初の原文との比較だけを継続します。
+          無料枠の回数制限に達した場合は429になることがあります。
         </div>`;
     }else if(p==='gemini'){
       providerHelp.innerHTML=`
@@ -1775,6 +1899,11 @@ ${selected ? '今回は反転選択された部分についての検証結果だ
 選択範囲の切り抜き画像が添付される場合がありますが、画像は次の目的にだけ使ってください。
 - OCRで読み間違えた文字を確認する
 - 数式、分数、指数、添字、平方根、数学記号などの文字構造を正しく読む
+- 矩形内に含まれるグラフ、表、図、座標軸、凡例、数値ラベル、見出し、項目名、単位、矢印などを正しく読み取る
+- グラフや表の中で、どの数値や項目がどこと対応しているかを確認する
+
+ただし、画像から読み取ってよいのは、あくまでユーザーが矩形選択した範囲の中にある
+文章・数式・グラフ・表・図の内容だけです。
 
 画像に写っている写真・人物・商品・周辺UI・背景・見出し・サムネイルなどを、
 回答内容の根拠として使ってはいけません。
@@ -1790,10 +1919,10 @@ ${selected ? '今回は反転選択された部分についての検証結果だ
 式の意味の説明はOCRされた文章と、その式の記述だけを根拠にしてください。`;
   }
 
-  function mathLikeText(text){
+  function structuredVisualLikeText(text){
     const s=(text||'').trim();
     if(!s) return false;
-    return /[=＋+\-−×÷√∫∑Σπθ∞≠≤≥<>^²³₀₁₂₃₄₅₆₇₈₉]|\\b(?:sin|cos|tan|log|ln|exp|lim|dx|dy)\\b|数式|方程式|ベクトル|内積|外積|行列|関数|平方根|分数|微分|積分/i.test(s);
+    return /[=＋+\-−×÷√∫∑Σπθ∞≠≤≥<>^²³₀₁₂₃₄₅₆₇₈₉%％]|\\b(?:sin|cos|tan|log|ln|exp|lim|dx|dy|x|y)\\b|数式|方程式|ベクトル|内積|外積|行列|関数|平方根|分数|微分|積分|グラフ|表|図|凡例|項目|単位|割合|推移|比較|年度|年齢|人数|売上|温度|回数|平均|中央値|最大|最小|軸|横軸|縦軸|系列|散布図|棒グラフ|折れ線|円グラフ/i.test(s);
   }
 
   function shouldAttachSelectionImage(selectedText=''){
@@ -1805,9 +1934,9 @@ ${selected ? '今回は反転選択された部分についての検証結果だ
     // 元の矩形画像は最初の原文のものなので再送しない。
     if((state.history||[]).length>0) return false;
 
-    // 初回の原文に数式らしい要素がある場合だけ、
-    // 切り抜き画像を文字・数式認識補助として添付する。
-    return hasSelectionImage() && mathLikeText(state.originalText);
+    // 初回の原文に、数式・グラフ・表・図らしい要素がある場合だけ、
+    // 切り抜き画像を読み取り補助として添付する。
+    return hasSelectionImage() && structuredVisualLikeText(state.originalText);
   }
 
   function hasSelectionImage(){
@@ -1914,11 +2043,29 @@ ${selected ? '今回は反転選択された部分についての検証結果だ
         bubbleText.textContent=full;
       }
       if(!full.trim()) throw new Error('Chrome内蔵AIから文章が返りませんでした。');
+      if(action==='verify'){
+        return {
+          text:full.trim(),
+          sources:[],
+          citations:[],
+          searched:false,
+          searchNote:'Chrome内蔵AIは端末内で動作するため、外部サイトの検索は行っていません。外部資料まで確認する場合は、設定でGeminiまたはOpenAIを選択してください。'
+        };
+      }
       return full.trim();
     }
 
     const text=await session.prompt(multimodalPrompt);
     if(!text || !String(text).trim()) throw new Error('Chrome内蔵AIから文章が返りませんでした。');
+    if(action==='verify'){
+      return {
+        text:String(text).trim(),
+        sources:[],
+        citations:[],
+        searched:false,
+        searchNote:'Chrome内蔵AIは端末内で動作するため、外部サイトの検索は行っていません。外部資料まで確認する場合は、設定でGeminiまたはOpenAIを選択してください。'
+      };
+    }
     return String(text).trim();
   }
 
@@ -1975,27 +2122,59 @@ ${selected ? '今回は反転選択された部分についての検証結果だ
       openSettings('Gemini Free Tier API Keyを入力してください。');
       throw new Error('API Key未設定');
     }
+
     const url='https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent';
-    const res=await fetch(url,{
-      method:'POST',
-      headers:{
-        'x-goog-api-key':geminiFreeKey,
-        'Content-Type':'application/json'
-      },
-      body:JSON.stringify({
-        contents:[{
-          role:'user',
-          parts:[
-            {text:promptWithVisualContext(action, selectedText)},
-            ...(shouldAttachSelectionImage(selectedText) && geminiImagePart() ? [geminiImagePart()] : [])
-          ]
-        }],
-        generationConfig:{temperature:action==='verify'?0.1:0.35}
-      })
+
+    const makeBody=(withSearch=false)=>({
+      contents:[{
+        role:'user',
+        parts:[
+          {text:promptWithVisualContext(action, selectedText)},
+          ...(shouldAttachSelectionImage(selectedText) && geminiImagePart() ? [geminiImagePart()] : [])
+        ]
+      }],
+      generationConfig:{temperature:action==='verify'?0.1:0.35},
+      ...(action==='verify' && withSearch ? {tools:[{google_search:{}}]} : {})
     });
-    const raw=await res.text();
-    let data;
-    try{data=JSON.parse(raw)}catch{data={error:{message:raw}}}
+
+    async function request(body){
+      const res=await fetch(url,{
+        method:'POST',
+        headers:{
+          'x-goog-api-key':geminiFreeKey,
+          'Content-Type':'application/json'
+        },
+        body:JSON.stringify(body)
+      });
+      const raw=await res.text();
+      let data;
+      try{data=JSON.parse(raw)}catch{data={error:{message:raw}}}
+      return {res,data};
+    }
+
+    if(action==='verify'){
+      let {res,data}=await request(makeBody(true));
+
+      // Free Tierやプロジェクト設定によって検索が使えない場合は、
+      // 原文照合だけは継続し、検索できなかったことを明示する。
+      if(!res.ok && [400,403,429].includes(res.status)){
+        const firstError=data?.error?.message || `HTTP ${res.status}`;
+        ({res,data}=await request(makeBody(false)));
+        if(!res.ok) throw friendlyGeminiError(res,data);
+        return {
+          text:extractGeminiText(data),
+          sources:[],
+          citations:[],
+          searched:false,
+          searchNote:'外部資料の検索は実行できませんでした。Geminiの検索利用枠またはプロジェクト設定をご確認ください。原文との比較は実行しています。'
+        };
+      }
+
+      if(!res.ok) throw friendlyGeminiError(res,data);
+      return extractGeminiResult(data);
+    }
+
+    const {res,data}=await request(makeBody(false));
     if(!res.ok) throw friendlyGeminiError(res,data);
     return extractGeminiText(data);
   }
@@ -2092,6 +2271,7 @@ ${selected ? '今回は反転選択された部分についての検証結果だ
     let data;
     try{data=JSON.parse(raw)}catch{data={error:{message:raw}}}
     if(!res.ok) throw friendlyOpenAIError(res,data);
+    if(action==='verify') return extractOpenAIResult(data);
     return extractOpenAIText(data);
   }
 
@@ -2132,27 +2312,34 @@ ${selected ? '今回は反転選択された部分についての検証結果だ
         }
       };
 
-      // Gemini無料枠ではGoogle Search groundingが使えないため、
-      // 明示的にONにされた場合だけ検索を付ける。
       if(action==='verify' && withSearch){
         body.tools=[{google_search:{}}];
       }
       return body;
     };
 
-    const wantSearch = action==='verify' && !!useSearchGrounding.checked;
+    // 「ほんとうに？」では検索対応Geminiなら自動的にGoogle Search groundingを試す。
+    const wantSearch = action==='verify';
 
-    // まず指定どおり実行
     let {res,data}=await geminiRequest(makeBody(wantSearch));
 
-    // Google検索付きで429になった場合は、
-    // 検索なしの「原文との比較・知識による確認」に自動フォールバックする。
-    if(wantSearch && res.status===429){
-      console.warn('Gemini Google Search grounding returned 429. Retrying without search grounding.');
+    if(wantSearch && !res.ok && [400,403,429].includes(res.status)){
+      console.warn('Gemini grounding unavailable. Retrying verify without web search.');
       ({res,data}=await geminiRequest(makeBody(false)));
+
+      if(!res.ok) throw friendlyGeminiError(res,data);
+
+      return {
+        text:extractGeminiText(data),
+        sources:[],
+        citations:[],
+        searched:false,
+        searchNote:'外部資料の検索を利用できなかったため、今回は最初の原文との比較とAIの既知情報の範囲で確認しています。'
+      };
     }
 
     if(!res.ok) throw friendlyGeminiError(res,data);
+    if(action==='verify') return extractGeminiResult(data);
     return extractGeminiText(data);
   }
 
@@ -2162,6 +2349,278 @@ ${selected ? '今回は反転選択された部分についての検証結果だ
     if(p==='gemini-free') return callGeminiFree(action, selectedText);
     if(p==='gemini') return callGemini(action, selectedText);
     return callOpenAI(action, selectedText);
+  }
+
+  function safeHttpUrl(value){
+    try{
+      const u=new URL(String(value||''));
+      if(u.protocol==='http:' || u.protocol==='https:') return u.href;
+    }catch(_e){}
+    return '';
+  }
+
+  function sourceKind(url='',title=''){
+    let host='';
+    try{host=new URL(url).hostname.toLowerCase()}catch(_e){}
+    const hay=(host+' '+String(title||'')).toLowerCase();
+
+    if(
+      /doi\.org|pubmed|ncbi\.nlm\.nih\.gov|jstage\.jst\.go\.jp|nature\.com|science\.org|springer\.com|sciencedirect\.com|wiley\.com|tandfonline\.com|cambridge\.org|oup\.com|ac\.jp|edu$/.test(hay)
+    ) return '学術・大学';
+
+    if(
+      /\.go\.jp|\.gov|who\.int|oecd\.org|un\.org|unesco\.org|worldbank\.org|jst\.go\.jp|riken\.jp|aist\.go\.jp|stat\.go\.jp|mext\.go\.jp|mhlw\.go\.jp|meti\.go\.jp|cao\.go\.jp/.test(hay)
+    ) return '公的機関';
+
+    if(
+      /reuters\.com|apnews\.com|bbc\.com|bbc\.co\.uk|nhk\.or\.jp|nikkei\.com|asahi\.com|yomiuri\.co\.jp|mainichi\.jp|kyodonews\.jp|jiji\.com/.test(hay)
+    ) return '報道';
+
+    if(
+      /dictionary|britannica|kotobank|japanknowledge|weblio|goo\.ne\.jp|merriam-webster|oxfordreference/.test(hay)
+    ) return '辞書・事典';
+
+    return 'Web資料';
+  }
+
+  function normalizeAIResult(value){
+    if(typeof value==='string'){
+      return {
+        text:value,
+        sources:[],
+        citations:[],
+        searched:false,
+        searchNote:''
+      };
+    }
+    return {
+      text:String(value?.text||'').trim(),
+      sources:Array.isArray(value?.sources)?value.sources:[],
+      citations:Array.isArray(value?.citations)?value.citations:[],
+      searched:!!value?.searched,
+      searchNote:String(value?.searchNote||'')
+    };
+  }
+
+  function extractOpenAIResult(data){
+    let text='';
+    const sources=[];
+    const sourceMap=new Map();
+    const citations=[];
+
+    function registerSource(url,title=''){
+      const safe=safeHttpUrl(url);
+      if(!safe) return -1;
+      if(sourceMap.has(safe)) return sourceMap.get(safe);
+      const index=sources.length;
+      sources.push({
+        url:safe,
+        title:String(title||safe),
+        kind:sourceKind(safe,title)
+      });
+      sourceMap.set(safe,index);
+      return index;
+    }
+
+    for(const item of (data.output||[])){
+      if(item.type!=='message') continue;
+      for(const c of (item.content||[])){
+        if(!((c.type==='output_text'||c.type==='text') && typeof c.text==='string')) continue;
+
+        const offset=text.length;
+        if(text) text+='\n';
+        const blockOffset=text.length;
+        text+=c.text;
+
+        for(const ann of (c.annotations||[])){
+          const nested=ann?.url_citation||{};
+          const url=ann?.url || nested?.url;
+          const title=ann?.title || nested?.title || url;
+          const si=registerSource(url,title);
+          if(si<0) continue;
+
+          const start=Number.isFinite(ann?.start_index) ? ann.start_index :
+                      Number.isFinite(nested?.start_index) ? nested.start_index : null;
+          const end=Number.isFinite(ann?.end_index) ? ann.end_index :
+                    Number.isFinite(nested?.end_index) ? nested.end_index : null;
+
+          if(end!==null){
+            citations.push({
+              start:start===null ? Math.max(0,end-1)+blockOffset : start+blockOffset,
+              end:end+blockOffset,
+              sourceIndices:[si]
+            });
+          }
+        }
+      }
+    }
+
+    if(!text && typeof data.output_text==='string') text=data.output_text.trim();
+
+    return {
+      text:text.trim(),
+      sources,
+      citations,
+      searched:sources.length>0,
+      searchNote:sources.length ? '' : 'ウェブ検索は呼び出されましたが、表示できる参照URLを取得できませんでした。'
+    };
+  }
+
+  function extractGeminiResult(data, searchNote=''){
+    const text=extractGeminiText(data);
+    const sources=[];
+    const sourceMap=new Map();
+    const chunkToSource=[];
+    const citations=[];
+
+    function registerSource(url,title=''){
+      const safe=safeHttpUrl(url);
+      if(!safe) return -1;
+      if(sourceMap.has(safe)) return sourceMap.get(safe);
+      const index=sources.length;
+      sources.push({
+        url:safe,
+        title:String(title||safe),
+        kind:sourceKind(safe,title)
+      });
+      sourceMap.set(safe,index);
+      return index;
+    }
+
+    const candidate=data?.candidates?.[0];
+    const metadata=candidate?.groundingMetadata || candidate?.grounding_metadata || {};
+    const chunks=metadata?.groundingChunks || metadata?.grounding_chunks || [];
+
+    chunks.forEach((chunk,chunkIndex)=>{
+      const web=chunk?.web;
+      const uri=web?.uri || web?.url;
+      const title=web?.title || uri;
+      chunkToSource[chunkIndex]=registerSource(uri,title);
+    });
+
+    const supports=metadata?.groundingSupports || metadata?.grounding_supports || [];
+    for(const support of supports){
+      const segment=support?.segment||{};
+      const end=Number.isFinite(segment?.endIndex) ? segment.endIndex :
+                Number.isFinite(segment?.end_index) ? segment.end_index : null;
+      const start=Number.isFinite(segment?.startIndex) ? segment.startIndex :
+                  Number.isFinite(segment?.start_index) ? segment.start_index : null;
+      const idxs=support?.groundingChunkIndices || support?.grounding_chunk_indices || [];
+      const sourceIndices=[...new Set(
+        idxs.map(i=>chunkToSource[i]).filter(i=>Number.isInteger(i) && i>=0)
+      )];
+      if(end!==null && sourceIndices.length){
+        citations.push({
+          start:start===null ? Math.max(0,end-1) : start,
+          end,
+          sourceIndices
+        });
+      }
+    }
+
+    return {
+      text,
+      sources,
+      citations,
+      searched:sources.length>0,
+      searchNote
+    };
+  }
+
+  function sourceLinksHTML(sourceIndices,sources){
+    const unique=[...new Set(sourceIndices||[])].filter(i=>sources[i]);
+    if(!unique.length) return '';
+    return unique.map(i=>{
+      const s=sources[i];
+      return `<a class="verify-citation verification-outbound" href="${escapeHTML(s.url)}" data-url="${escapeHTML(s.url)}" title="${escapeHTML(s.title)}">[${i+1}]</a>`;
+    }).join('');
+  }
+
+  function citedTextHTML(text,citations,sources){
+    if(!citations?.length){
+      return escapeHTML(text).replace(/\n/g,'<br>');
+    }
+
+    const grouped=new Map();
+    for(const c of citations){
+      const end=Math.max(0,Math.min(text.length,Number(c.end)||0));
+      if(!grouped.has(end)) grouped.set(end,[]);
+      grouped.get(end).push(...(c.sourceIndices||[]));
+    }
+
+    const ends=[...grouped.keys()].sort((a,b)=>a-b);
+    let cursor=0;
+    let out='';
+
+    for(const end of ends){
+      if(end<cursor) continue;
+      out+=escapeHTML(text.slice(cursor,end)).replace(/\n/g,'<br>');
+      out+=sourceLinksHTML(grouped.get(end),sources);
+      cursor=end;
+    }
+    out+=escapeHTML(text.slice(cursor)).replace(/\n/g,'<br>');
+    return out;
+  }
+
+  function verificationResultHTML(result){
+    const r=normalizeAIResult(result);
+    let html=`<div class="verification-answer">${citedTextHTML(r.text,r.citations,r.sources)}</div>`;
+
+    if(r.sources.length){
+      html+='<div class="verification-sources">';
+      html+='<div class="verification-sources-title">参照資料</div>';
+      r.sources.forEach((s,i)=>{
+        let host='';
+        try{host=new URL(s.url).hostname.replace(/^www\./,'')}catch(_e){}
+        html+=`<div class="verification-source">
+          <div class="verification-source-number">${i+1}</div>
+          <div class="verification-source-main">
+            <a class="verification-source-link verification-outbound" href="${escapeHTML(s.url)}" data-url="${escapeHTML(s.url)}">${escapeHTML(s.title||host||s.url)}</a>
+            <div class="verification-source-meta">
+              <span class="source-kind">${escapeHTML(s.kind||'Web資料')}</span>
+              ${host ? `<span>${escapeHTML(host)}</span>` : ''}
+            </div>
+          </div>
+        </div>`;
+      });
+      html+='</div>';
+    }
+
+    if(r.searchNote){
+      html+=`<div class="verification-search-note">${escapeHTML(r.searchNote)}</div>`;
+    }
+
+    return html;
+  }
+
+  function bindVerificationLinks(){
+    bubbleText.querySelectorAll('.verification-outbound').forEach(a=>{
+      a.addEventListener('click',ev=>{
+        ev.preventDefault();
+        ev.stopPropagation();
+        const url=safeHttpUrl(a.dataset.url || a.getAttribute('href'));
+        if(!url) return;
+        const w=window.open(
+          url,
+          '_blank',
+          'noopener,noreferrer,width=1100,height=800,resizable=yes,scrollbars=yes'
+        );
+        if(w) try{w.opener=null}catch(_e){}
+      });
+    });
+  }
+
+  async function replaceBubbleResult(result){
+    bubbleText.classList.remove('swap-in');
+    bubbleText.classList.add('swap-out');
+    await wait(170);
+    bubbleText.innerHTML=verificationResultHTML(result);
+    bindVerificationLinks();
+    bubbleText.classList.remove('swap-out');
+    void bubbleText.offsetWidth;
+    bubbleText.classList.add('swap-in');
+    await wait(340);
+    bubbleText.classList.remove('swap-in');
   }
 
   function extractOpenAIText(data){
@@ -2212,16 +2671,21 @@ ${selected ? '今回は反転選択された部分についての検証結果だ
       if(currentProvider()==='chromeai' && !chromeAISession){
         bubbleText.innerHTML=`<span class="loading-row"><span class="spinner"></span>初回だけ無料AIを準備しています…</span>`;
       }else{
-        bubbleText.innerHTML=`<span class="loading-row"><span class="spinner"></span>${escapeHTML(actionName(action))}…</span>`;
+        bubbleText.innerHTML=`<span class="loading-row"><span class="spinner"></span>${escapeHTML(action==='verify' ? '原文と外部資料を確認しています' : actionName(action))}…</span>`;
       }
 
       try{
-        const output=await callAI(action, selectedText);
+        const rawOutput=await callAI(action, selectedText);
+        const result=normalizeAIResult(rawOutput);
+        const output=result.text;
+
         state.currentText=output;
         state.history.push({
           action,
           input,
           output,
+          sources:result.sources,
+          searched:result.searched,
           time:Date.now(),
           provider:providerName(),
           model:currentModelLabel()
@@ -2233,10 +2697,20 @@ ${selected ? '今回は反転選択された部分についての検証結果だ
           state.lastTransformAction=action;
         }
 
-        logInteraction('ai',actionName(action),input,output,selectedText ? '吹き出し内の反転選択部分のみを対象' : '',selectedText);
+        const sourceSummary=result.sources.length
+          ? `参照資料: ${result.sources.map(s=>s.title||s.url).join(' / ')}`
+          : '';
+        const extra=[
+          selectedText ? '吹き出し内の反転選択部分のみを対象' : '',
+          action==='verify' ? (result.searched ? '外部資料検索あり' : '外部資料検索なし') : '',
+          sourceSummary
+        ].filter(Boolean).join(' | ');
 
-        // Chrome内蔵AIは生成中から逐次表示しているので、最後に重い差し替えをしない
-        if(currentProvider()==='chromeai'){
+        logInteraction('ai',actionName(action),input,output,extra,selectedText);
+
+        if(action==='verify'){
+          await replaceBubbleResult(result);
+        }else if(currentProvider()==='chromeai'){
           bubbleText.textContent=output;
           bubbleText.classList.remove('swap-out','swap-in');
         }else{
