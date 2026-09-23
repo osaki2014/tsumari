@@ -754,7 +754,7 @@
       </div>
       <div class="help-tip">
         <b>説明する学年を選べます</b>
-        <p>小学3年から中学3年までを設定できます。小3〜小6では生成後に配当漢字を実際に照合し、未習漢字を自動で書き直します。専門用語に未習漢字がある場合は、用語全体を正しいひらがなにします。初期値は小学5年です。</p>
+        <p>小学3年から中学3年までを設定できます。小3〜小6では最初のAI生成時に学年別漢字配当表の許可文字をすべて渡し、返答前にAI内部で照合します。専門用語に未習漢字がある場合は、用語全体を正しいひらがなにします。初期値は小学5年です。</p>
       </div>
       <div class="help-tip">
         <b>設定ではAIと履歴を管理できます</b>
@@ -820,7 +820,7 @@
       <div class="grade-note">
         文部科学省の現行学習指導要領（平成29年告示）国語を基準に、
         漢字・熟語・語彙・文の構成・表現技法をこの学年までに合わせます。
-        小3〜小6は、生成後にも学年別漢字配当表で1文字ずつ機械チェックし、未習漢字が残れば自動で書き直します。
+        小3〜小6は、最初のAI生成時にその学年までの配当漢字を完全な許可リストとして渡し、AIが返答前に1文字ずつ内部確認します。
       </div>
     </div>
 
@@ -1031,23 +1031,42 @@
   }
 
   function curriculumProfile(grade=currentGradeValue()){
+    const allowedKanji = grade<=6
+      ? [...(PRIMARY_CUMULATIVE_KANJI[grade] || [])].join('')
+      : '';
+
+    const exactKanjiRule = grade<=6 ? `
+
+【この学年までに説明文で使ってよい漢字の完全な許可リスト】
+${allowedKanji}
+
+重要：
+- 上の許可リストに無い漢字は、最終回答に1文字も出してはいけません。
+- 「たぶん習っているだろう」と記憶で判断せず、必ずこの許可リストだけを基準にしてください。
+- 回答を作ったあと、画面へ返す前に、回答中の漢字を内部で1文字ずつ許可リストと照合してください。
+- 許可リストにない漢字が1文字でも見つかったら、そのまま出力せず、同じ1回の生成処理の中で文章を書き直してから再点検してください。
+- この内部点検が終わるまで最終回答を返さないでください。
+
+【未習漢字を含む専門用語の扱い】
+- 一般の言葉なら、対象学年までの言葉へ意味をひらいて置き換えてください。
+- 専門用語、正式名称、分類名、学術上のキーワードなど、別の言葉にすると正確さを失う語に未習漢字が1字でも含まれる場合は、その語全体を正しい読みのひらがなにしてください。
+- 一部の漢字だけをかなにする「混ぜ書き」は禁止です。
+- 例：小学3年では「裸子植物」は「らししょくぶつ」、「被子植物」は「ひししょくぶつ」、「維管束植物」は「いかんそくしょくぶつ」と書きます。
+- 数式記号、アルファベット、数字は漢字許可リストの対象外です。` : '';
+
     const common=`【学年制約：最優先】
 対象は「${GRADE_LABELS[grade]}」までの国語学習です。
 これは文章を短くするだけの設定ではありません。説明文そのものの漢字、熟語、語彙、文の組み立て、文章の展開、表現技法を、この学年までに学ぶ範囲へ合わせてください。
+${exactKanjiRule}
 
 共通ルール：
 - 言葉遣いは、丁寧な話し言葉の「です・ます」調にする。
 - 内容の正確さや原文の意味は変えない。
 - 対象学年より難しい語、熟語、漢字、文法的な組み立て、表現技法を説明に使わない。
-- どうしても必要な固有名詞・正式名称・数式記号・専門用語は残してよい。ただし、直後に対象学年までの言葉で意味をひらく。
-- 小学校段階では、その学年までの学年別漢字配当表にない漢字を説明本文に残してはいけない。
-- 普通の言葉に未習漢字がある場合は、対象学年までに読める別の言葉へ置き換える。
-- 専門用語、正式名称、分類名など、別の言葉へ変えると正確さを失うキーワードに未習漢字が含まれる場合は、その用語全体を正しい読みのひらがなにする。未習漢字だけを一文字ずつ仮名にして不自然な混ぜ書きにしてはいけない。
-  例：小学3年で「裸子植物」と書きたい場合は「ら子植物」ではなく「らししょくぶつ」とする。「被子植物」は「ひししょくぶつ」とする。
-- 熟語の各文字が読めても、その熟語の意味が対象学年には難しい場合は、その熟語を使わず、やさしい複数の言葉へひらく。
+- 固有名詞・正式名称・専門用語が必要でも、小学校設定では未習漢字をそのまま残さない。
+- 熟語の各文字が許可されていても、その熟語の意味自体が対象学年には難しい場合は、やさしい複数の言葉へひらく。
 - 一文を長くしすぎない。主語と述語、修飾する言葉とされる言葉の関係が分かる文にする。
-- 最後に出力前の自己点検を行い、対象学年より先で学ぶ表現が一つでもあれば、対象学年までの表現へ書き直してから答える。
-- この学年チェックを行ったこと自体は、返答本文に書かない。`;
+- 最終回答には、内部で行った学年チェックや漢字チェックの説明を書かない。`;
 
     const profiles={
       3:`${common}
@@ -2465,10 +2484,7 @@ ${selected ? '今回は反転選択された部分を中心に検証してくだ
       const stream=session.promptStreaming(multimodalPrompt);
       for await (const chunk of stream){
         full += String(chunk||'');
-        // 小学校設定では、配当漢字の機械チェック前の文章を画面に出さない。
-        if(currentGradeValue()>6){
-          bubbleText.textContent=full;
-        }
+        bubbleText.textContent=full;
       }
       if(!full.trim()) throw new Error('Chrome内蔵AIから文章が返りませんでした。');
       if(action==='verify'){
@@ -2779,153 +2795,6 @@ ${selected ? '今回は反転選択された部分を中心に検証してくだ
     return callOpenAI(action, selectedText);
   }
 
-
-  function gradeRepairPrompt(text,forbidden,grade=currentGradeValue(),finalPass=false){
-    const allowed=grade<=6
-      ? [...(PRIMARY_CUMULATIVE_KANJI[grade]||[])].join('')
-      : '';
-
-    return `次の文章を「${currentGradeLabel()}」までの国語の学習範囲に、厳密に書き直してください。
-
-【元の文章】
-${text}
-
-【機械チェックで見つかった、この学年ではまだ使わない漢字】
-${forbidden.join('、')}
-
-【この学年までに使ってよい漢字】
-${allowed}
-
-必ず守ること：
-1. 上の「まだ使わない漢字」を、返答に一字も残さないでください。
-2. 書き直した結果に、別の未習漢字を新しく入れないでください。
-3. 普通の言葉なら、この学年までの漢字・ひらがなを使った、よりやさしい言葉へ置き換えてください。
-4. 専門用語・正式名称・分類名・学術的なキーワードなど、別の言葉にすると意味が変わる語に未習漢字が一字でも含まれる場合は、そのキーワード全体を正しい読みのひらがなにしてください。
-   例：小学3年なら「裸子植物」→「らししょくぶつ」、「被子植物」→「ひししょくぶつ」、「維管束植物」→「いかんそくしょくぶつ」。
-5. 「ら子植物」のように、用語の一部だけをひらがなにする不自然な混ぜ書きは禁止です。
-6. 固有名詞も、説明に不可欠で未習漢字を含む場合は、必要に応じて正しい読みのひらがなにしてください。
-7. 内容、数値、因果関係、元の結論は変えないでください。
-8. 「です」「ます」調の丁寧な話し言葉にしてください。
-9. 見出しも学年制約の対象です。見出しに未習漢字を残さないでください。
-10. 書き直した本文だけを返してください。説明、注記、チェック結果は付けないでください。
-${finalPass ? '11. 最終確認です。漢字を減らすことを最優先し、迷う言葉はひらがなにしてください。' : ''}`;
-  }
-
-  async function callPlainAI(prompt){
-    const p=currentProvider();
-
-    if(p==='chromeai'){
-      const session=await getChromeAISession();
-      const text=await session.prompt(prompt);
-      if(!text || !String(text).trim()) throw new Error('Chrome内蔵AIから文章が返りませんでした。');
-      return String(text).trim();
-    }
-
-    if(p==='gemini-free'){
-      if(!geminiFreeKey) throw new Error('API Key未設定');
-      const url='https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent';
-      const res=await fetch(url,{
-        method:'POST',
-        headers:{
-          'x-goog-api-key':geminiFreeKey,
-          'Content-Type':'application/json'
-        },
-        body:JSON.stringify({
-          contents:[{role:'user',parts:[{text:prompt}]}],
-          generationConfig:{temperature:0.05}
-        })
-      });
-      const raw=await res.text();
-      let data;
-      try{data=JSON.parse(raw)}catch{data={error:{message:raw}}}
-      if(!res.ok) throw friendlyGeminiError(res,data);
-      return extractGeminiText(data);
-    }
-
-    if(p==='gemini'){
-      if(!geminiKey) throw new Error('API Key未設定');
-      const {res,data}=await geminiRequest({
-        contents:[{role:'user',parts:[{text:prompt}]}],
-        generationConfig:{temperature:0.05}
-      });
-      if(!res.ok) throw friendlyGeminiError(res,data);
-      return extractGeminiText(data);
-    }
-
-    if(!openAIKey) throw new Error('API Key未設定');
-    const res=await fetch('https://api.openai.com/v1/responses',{
-      method:'POST',
-      headers:{
-        'Authorization':`Bearer ${openAIKey}`,
-        'Content-Type':'application/json'
-      },
-      body:JSON.stringify({
-        model:modelSelect.value,
-        reasoning:{effort:'low'},
-        input:prompt
-      })
-    });
-    const raw=await res.text();
-    let data;
-    try{data=JSON.parse(raw)}catch{data={error:{message:raw}}}
-    if(!res.ok) throw friendlyOpenAIError(res,data);
-    return extractOpenAIText(data);
-  }
-
-  async function enforceGradeKanji(text){
-    const grade=currentGradeValue();
-    let current=String(text||'').trim();
-
-    // 中学校には小学校のような「字ごとの学年別配当」がないため、
-    // 機械的な1字照合は小3〜小6で行う。
-    if(grade>6 || !current){
-      return {text:current, repaired:false, rounds:0, remaining:[]};
-    }
-
-    let forbidden=disallowedKanji(current,grade);
-    if(!forbidden.length){
-      return {text:current, repaired:false, rounds:0, remaining:[]};
-    }
-
-    let rounds=0;
-    const maxRounds=4;
-
-    while(forbidden.length && rounds<maxRounds){
-      rounds++;
-
-      if(working){
-        bubbleText.innerHTML=
-          `<span class="loading-row"><span class="spinner"></span>${escapeHTML(currentGradeLabel())}までの漢字を確認しています… ${rounds}/${maxRounds}</span>`;
-      }
-
-      const prompt=gradeRepairPrompt(
-        current,
-        forbidden,
-        grade,
-        rounds===maxRounds
-      );
-
-      current=(await callPlainAI(prompt)).trim();
-      forbidden=disallowedKanji(current,grade);
-    }
-
-    if(forbidden.length){
-      // ここまで残る場合は、AIが制約を守れていないことを隠さずエラーにする。
-      // 未習漢字をそのまま表示するより安全。
-      const e=new Error(
-        `${currentGradeLabel()}ではまだ使わない漢字が残りました：${forbidden.join('、')}。もう一度ボタンを押してください。`
-      );
-      e.kind='grade-kanji';
-      throw e;
-    }
-
-    return {
-      text:current,
-      repaired:true,
-      rounds,
-      remaining:[]
-    };
-  }
 
   function safeHttpUrl(value){
     try{
@@ -3253,17 +3122,20 @@ ${finalPass ? '11. 最終確認です。漢字を減らすことを最優先し�
       try{
         const rawOutput=await callAI(action, selectedText);
         const result=normalizeAIResult(rawOutput);
-
-        const gradeCheck=await enforceGradeKanji(result.text);
-        result.text=gradeCheck.text;
-
-        // 書き直すと検索回答の文字位置が変わるため、本文中の位置指定引用だけ外す。
-        // 下部の「参照資料」リンクはそのまま保持する。
-        if(gradeCheck.repaired){
-          result.citations=[];
-        }
-
         const output=result.text;
+
+        // 学年別漢字配当表は最初のAI生成プロンプトに完全な許可リストとして渡している。
+        // 2回目のAI呼び出しは行わない。
+        // 下記は通信を伴わないローカル監査で、デバッグ用にConsoleへ警告するだけ。
+        if(currentGradeValue()<=6){
+          const localAudit=disallowedKanji(output,currentGradeValue());
+          if(localAudit.length){
+            console.warn(
+              `[学年漢字監査] ${currentGradeLabel()}の許可リスト外の漢字がAI出力に残りました:`,
+              localAudit.join('、')
+            );
+          }
+        }
 
         state.currentText=output;
         state.history.push({
@@ -3291,7 +3163,7 @@ ${finalPass ? '11. 最終確認です。漢字を減らすことを最優先し�
         const extra=[
           selectedText ? '吹き出し内の反転選択部分のみを対象' : '',
           action==='verify' ? (result.searched ? '外部資料検索あり' : '外部資料検索なし') : '',
-          gradeCheck.repaired ? `学年漢字チェックで自動修正 ${gradeCheck.rounds}回` : '学年漢字チェック合格',
+          currentGradeValue()<=6 ? '初回生成時に学年別漢字許可リストを適用' : '中学校学年設定を適用',
           sourceSummary
         ].filter(Boolean).join(' | ');
 
@@ -3310,10 +3182,6 @@ ${finalPass ? '11. 最終確認です。漢字を減らすことを最優先し�
         if(e.message!=='API Key未設定'){
           if(e.kind==='billing'){
             await replaceBubbleText('OpenAI API Keyは届いていますが、API残高がありません。\n\n⚙ 設定でGeminiに切り替えることもできます。');
-          }else if(e.kind==='grade-kanji'){
-            await replaceBubbleText(
-              '学年に合わせた漢字の書き直しが完了しませんでした。\n\n'+e.message
-            );
           }else{
             const aiName=providerName();
             await replaceBubbleText(aiName+'を利用できませんでした。\n\n'+e.message);
