@@ -482,7 +482,7 @@
     <div class="brand">ことばをひらく</div>
   </div>
   <div class="header-actions">
-    <button id="captureBtn" class="capture-btn" title="共有画面を選んだ後このアプリへ戻ります。選択範囲の文章・数式・図をAIが画像からも読み取ります">画面を取り込む</button>
+    <button id="captureBtn" class="capture-btn" title="共有画面を選んだ後このアプリへ戻ります。AIの回答対象は矩形内のOCR文章だけです。数式時のみ矩形画像を読み取り補助に使います">画面を取り込む</button>
     <button id="helpBtn" class="icon-btn" aria-label="ヘルプ" title="使い方・各ボタンの説明">?</button>
     <button id="settingsBtn" class="icon-btn" aria-label="設定" title="設定">⚙</button>
   </div>
@@ -570,7 +570,7 @@
       </div>
       <div class="help-tip">
         <b>数式・記号・図がある範囲も選べます</b>
-        <p>文字OCRだけでなく選択範囲の画像もAIに渡すため、分数、指数、平方根、数式記号、図中の文字なども読み取って説明できます。</p>
+        <p>通常の文章は矩形内でOCRしたテキストだけをAIに渡します。数式がある場合だけ、同じ矩形の切り抜き画像を数式・記号の読み取り補助として使います。画面全体や矩形外の写真・文章は回答に使いません。</p>
       </div>
       <div class="help-tip">
         <b>吹き出しは自由に動かせます</b>
@@ -1441,6 +1441,8 @@
 - 難しい専門語や抽象語はできるだけ避ける。
 - 必要な専門語を使う場合は、その場で短く意味を説明する。
 - 元の文章にない事実を勝手に追加しない。
+- 選択範囲の外側にある写真・図・投稿・見出し・周辺画面の内容を推測しない。
+- 「この写真」「この図」「それ」などの参照先が選択文の中に無ければ、勝手に補わない。
 - 元の意味や大切な条件は変えない。
 - 「小学5年生向けに説明します」などの前置きは不要。
 - Markdown、見出し、箇条書きは原則使わない。
@@ -1766,25 +1768,46 @@ ${selected ? '今回は反転選択された部分についての検証結果だ
   function promptWithVisualContext(action, selectedText=''){
     return `${promptFor(action, selectedText)}
 
-【選択範囲の画像について】
-この指示には、ユーザーが実際に矩形選択した元画像も一緒に渡します。
-OCRされた文字と元画像が食い違う場合は、元画像を優先してください。
+【重要：回答に使ってよい情報の範囲】
+回答内容の根拠にしてよいのは、ユーザーが最初に矩形選択した範囲からOCRした文章と、
+吹き出し内で反転選択された文字列だけです。
 
-画像内に数式がある場合は、数式を単なる文字列として流さず、式の構造を正確に読み取ってください。
-特に次を注意して見てください：
-- 分数の分子・分母
-- 上付き・下付き文字
-- 2乗、3乗などの指数
-- 平方根・根号
-- 括弧
-- ＋、−、×、÷、＝、≠、＜、＞などの演算・関係記号
-- Σ、∫、π、θなどの数学記号
-- 添字
-- 表、グラフ、図と式の対応
+選択範囲の切り抜き画像が添付される場合がありますが、画像は次の目的にだけ使ってください。
+- OCRで読み間違えた文字を確認する
+- 数式、分数、指数、添字、平方根、数学記号などの文字構造を正しく読む
 
-読み手の語彙・前提知識は小学5年生程度ですが、式そのものを勝手に簡単な別の式へ変えてはいけません。
-必要なら「この記号は〜を表します」のように、式を保ったまま意味を丁寧に説明してください。
-画像に数式がなければ、通常の文章として処理してください。`;
+画像に写っている写真・人物・商品・周辺UI・背景・見出し・サムネイルなどを、
+回答内容の根拠として使ってはいけません。
+選択範囲の外側の画面を見たものとして答えてはいけません。
+画像から新しい出来事・人物関係・事実関係を推測してはいけません。
+
+文章中に「この写真」「この図」「それ」「上記」など、
+選択範囲の外側を参照している表現があっても、その参照先を推測しないでください。
+選択された文章だけでは判断できない場合は、
+「選択された文章だけでは、その内容までは分かりません」のように明示してください。
+
+数式がある場合も、画像は式を正確に読むためだけに使い、
+式の意味の説明はOCRされた文章と、その式の記述だけを根拠にしてください。`;
+  }
+
+  function mathLikeText(text){
+    const s=(text||'').trim();
+    if(!s) return false;
+    return /[=＋+\-−×÷√∫∑Σπθ∞≠≤≥<>^²³₀₁₂₃₄₅₆₇₈₉]|\\b(?:sin|cos|tan|log|ln|exp|lim|dx|dy)\\b|数式|方程式|ベクトル|内積|外積|行列|関数|平方根|分数|微分|積分/i.test(s);
+  }
+
+  function shouldAttachSelectionImage(selectedText=''){
+    // 吹き出し内の一部分を反転した場合は、その文字だけを扱う。
+    // 元の矩形画像を添付すると、選択外の情報を混ぜる原因になるため送らない。
+    if((selectedText||'').trim()) return false;
+
+    // 一度AI変換した後は、現在の吹き出し文章だけを対象にする。
+    // 元の矩形画像は最初の原文のものなので再送しない。
+    if((state.history||[]).length>0) return false;
+
+    // 初回の原文に数式らしい要素がある場合だけ、
+    // 切り抜き画像を文字・数式認識補助として添付する。
+    return hasSelectionImage() && mathLikeText(state.originalText);
   }
 
   function hasSelectionImage(){
@@ -1873,7 +1896,7 @@ OCRされた文字と元画像が食い違う場合は、元画像を優先し�
     const promptText=promptWithVisualContext(action, selectedText);
 
     // 数式を含む可能性があるので、矩形画像そのものをAIへ渡す。
-    const multimodalPrompt = hasSelectionImage()
+    const multimodalPrompt = shouldAttachSelectionImage(selectedText)
       ? [{
           role:'user',
           content:[
@@ -1964,7 +1987,7 @@ OCRされた文字と元画像が食い違う場合は、元画像を優先し�
           role:'user',
           parts:[
             {text:promptWithVisualContext(action, selectedText)},
-            ...(geminiImagePart() ? [geminiImagePart()] : [])
+            ...(shouldAttachSelectionImage(selectedText) && geminiImagePart() ? [geminiImagePart()] : [])
           ]
         }],
         generationConfig:{temperature:action==='verify'?0.1:0.35}
@@ -2044,7 +2067,7 @@ OCRされた文字と元画像が食い違う場合は、元画像を優先し�
     const body={
       model:modelSelect.value,
       reasoning:{effort:'low'},
-      input: hasSelectionImage()
+      input: shouldAttachSelectionImage(selectedText)
         ? [{
             role:'user',
             content:[
@@ -2101,7 +2124,7 @@ OCRされた文字と元画像が食い違う場合は、元画像を優先し�
           role:'user',
           parts:[
             {text:promptWithVisualContext(action, selectedText)},
-            ...(geminiImagePart() ? [geminiImagePart()] : [])
+            ...(shouldAttachSelectionImage(selectedText) && geminiImagePart() ? [geminiImagePart()] : [])
           ]
         }],
         generationConfig:{
