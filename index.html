@@ -152,32 +152,13 @@
     filter:drop-shadow(8px 9px 0 rgba(0,0,0,.22));
   }
 
-  .bubble-drag-handle{
-    position:relative;
-    z-index:2;
-    flex:0 0 12px;
-    height:12px;
-    display:grid;
-    place-items:center;
-    cursor:grab;
-    touch-action:none;
-    margin:-2px 0 3px;
-  }
-  .bubble-drag-handle:active{cursor:grabbing}
-  .bubble-drag-handle::before{
-    content:"";
-    width:42px;
-    height:4px;
-    border-radius:999px;
-    background:#d4d4d4;
-  }
 
   .bubble-resize-right{
     position:absolute;
     top:26px;
     right:-4px;
     width:10px;
-    bottom:24px;
+    bottom:26px;
     cursor:ew-resize;
     touch-action:none;
     z-index:4;
@@ -185,7 +166,7 @@
   .bubble-resize-bottom{
     position:absolute;
     left:26px;
-    right:24px;
+    right:26px;
     bottom:-4px;
     height:10px;
     cursor:ns-resize;
@@ -193,34 +174,73 @@
     z-index:4;
   }
 
-  .bubble-resize-handle{
+  /* ドラッグできる余白はすべて手のカーソルにする */
+  .bubble-toolbar{
+    cursor:grab;
+  }
+  .bubble-toolbar:active{
+    cursor:grabbing;
+  }
+  .bubble-toolbar button{
+    cursor:pointer;
+  }
+
+  .bubble-body{
+    cursor:grab;
+  }
+  .bubble-body:active{
+    cursor:grabbing;
+  }
+  .bubble-text{
+    cursor:text;
+  }
+
+  /* 4隅は見た目を出さず、角R部分そのものをリサイズ領域にする */
+  .bubble-resize-corner{
     position:absolute;
-    right:5px;
-    bottom:5px;
-    width:19px;
-    height:19px;
-    cursor:nwse-resize;
+    width:26px;
+    height:26px;
+    z-index:6;
     touch-action:none;
-    z-index:3;
-    opacity:.55;
+    background:transparent;
   }
-  .bubble-resize-handle::before,
-  .bubble-resize-handle::after{
-    content:"";
+  .bubble-resize-nw{
+    left:-3px; top:-3px;
+    cursor:nwse-resize;
+  }
+  .bubble-resize-ne{
+    right:-3px; top:-3px;
+    cursor:nesw-resize;
+  }
+  .bubble-resize-sw{
+    left:-3px; bottom:-3px;
+    cursor:nesw-resize;
+  }
+  .bubble-resize-se{
+    right:-3px; bottom:-3px;
+    cursor:nwse-resize;
+  }
+
+  /* 辺によるリサイズも見た目を出さずに維持 */
+  .bubble-resize-left{
     position:absolute;
-    right:1px;
-    bottom:1px;
-    width:12px;
-    height:2px;
-    background:#777;
-    transform-origin:right center;
-    transform:rotate(-45deg);
-    border-radius:2px;
+    left:-4px;
+    top:26px;
+    bottom:26px;
+    width:10px;
+    cursor:ew-resize;
+    touch-action:none;
+    z-index:5;
   }
-  .bubble-resize-handle::after{
-    width:7px;
-    right:1px;
-    bottom:6px;
+  .bubble-resize-top{
+    position:absolute;
+    top:-4px;
+    left:26px;
+    right:26px;
+    height:10px;
+    cursor:ns-resize;
+    touch-action:none;
+    z-index:5;
   }
 
   .bubble-toolbar{
@@ -262,7 +282,8 @@
     scrollbar-width:thin;
     flex:1 1 auto;
     min-height:0;
-    padding-right:3px;
+    padding:4px 10px 10px 4px;
+    cursor:grab;
   }
   .bubble-text{
     font-size:17px;
@@ -650,8 +671,7 @@
       <svg id="bubbleShapeLayer" class="bubble-shape-layer" aria-hidden="true" viewBox="0 0 100 100" preserveAspectRatio="none">
         <path id="bubbleShapePath" class="bubble-shape" d=""></path>
       </svg>
-      <div id="bubbleDragHandle" class="bubble-drag-handle" title="ドラッグして吹き出しを移動"></div>
-      <div class="bubble-toolbar">
+      <div class="bubble-toolbar" title="ボタン以外の空白をドラッグして移動">
         <button class="word-btn" data-action="explain" title="一部を反転選択して押すと、その部分だけを説明します">ということは</button>
         <button class="word-btn" data-action="analogy" title="一部を反転選択して押すと、その部分だけを言いかえます">いいかえると</button>
         <button class="word-btn" data-action="summary" title="一部を反転選択して押すと、その部分だけをまとめます">つまり</button>
@@ -662,9 +682,15 @@
       <div class="bubble-body">
         <div id="bubbleText" class="bubble-text"></div>
       </div>
+      <div id="bubbleResizeLeft" class="bubble-resize-left" title="左端をドラッグして幅を変更"></div>
       <div id="bubbleResizeRight" class="bubble-resize-right" title="右端をドラッグして幅を変更"></div>
+      <div id="bubbleResizeTop" class="bubble-resize-top" title="上端をドラッグして高さを変更"></div>
       <div id="bubbleResizeBottom" class="bubble-resize-bottom" title="下端をドラッグして高さを変更"></div>
-      <div id="bubbleResizeHandle" class="bubble-resize-handle" title="右下をドラッグして大きさを変更"></div>
+
+      <div id="bubbleResizeNW" class="bubble-resize-corner bubble-resize-nw" title="左上角をドラッグして拡大縮小"></div>
+      <div id="bubbleResizeNE" class="bubble-resize-corner bubble-resize-ne" title="右上角をドラッグして拡大縮小"></div>
+      <div id="bubbleResizeSW" class="bubble-resize-corner bubble-resize-sw" title="左下角をドラッグして拡大縮小"></div>
+      <div id="bubbleResizeSE" class="bubble-resize-corner bubble-resize-se" title="右下角をドラッグして拡大縮小"></div>
     </div>
   </section>
 </main>
@@ -728,7 +754,7 @@
       </div>
       <div class="help-tip">
         <b>説明する学年を選べます</b>
-        <p>小学3年から中学3年までを設定できます。語彙だけでなく、漢字・熟語・文の組み立て・比喩などの表現技法も、その学年までの国語の学習内容に合わせます。初期値は小学5年です。</p>
+        <p>小学3年から中学3年までを設定できます。小3〜小6では生成後に配当漢字を実際に照合し、未習漢字を自動で書き直します。専門用語に未習漢字がある場合は、用語全体を正しいひらがなにします。初期値は小学5年です。</p>
       </div>
       <div class="help-tip">
         <b>設定ではAIと履歴を管理できます</b>
@@ -794,7 +820,7 @@
       <div class="grade-note">
         文部科学省の現行学習指導要領（平成29年告示）国語を基準に、
         漢字・熟語・語彙・文の構成・表現技法をこの学年までに合わせます。
-        小学校は学年別漢字配当表を上限の目安にします。
+        小3〜小6は、生成後にも学年別漢字配当表で1文字ずつ機械チェックし、未習漢字が残れば自動で書き直します。
       </div>
     </div>
 
@@ -847,10 +873,14 @@
   const bubble = $('#bubble');
   const bubbleText = $('#bubbleText');
   const actionButtons = $$('.word-btn');
-  const bubbleDragHandle = $('#bubbleDragHandle');
-  const bubbleResizeHandle = $('#bubbleResizeHandle');
+  const bubbleResizeLeft = $('#bubbleResizeLeft');
   const bubbleResizeRight = $('#bubbleResizeRight');
+  const bubbleResizeTop = $('#bubbleResizeTop');
   const bubbleResizeBottom = $('#bubbleResizeBottom');
+  const bubbleResizeNW = $('#bubbleResizeNW');
+  const bubbleResizeNE = $('#bubbleResizeNE');
+  const bubbleResizeSW = $('#bubbleResizeSW');
+  const bubbleResizeSE = $('#bubbleResizeSE');
   const bubbleShapeLayer = $('#bubbleShapeLayer');
   const bubbleShapePath = $('#bubbleShapePath');
 
@@ -928,6 +958,48 @@
     9:'その他の常用漢字の大体を読む段階'
   };
 
+  // 文部科学省・現行の学年別漢字配当表。
+  // 小3〜小6では、AI生成後にもこの実データで1文字ずつ再検査する。
+  const PRIMARY_GRADE_KANJI = {
+    1:'一右雨円王音下火花貝学気九休玉金空月犬見五口校左三山子四糸字耳七車手十出女小上森人水正生青夕石赤千川先早草足村大男竹中虫町天田土二日入年白八百文木本名目立力林六',
+    2:'引羽雲園遠何科夏家歌画回会海絵外角楽活間丸岩顔汽記帰弓牛魚京強教近兄形計元言原戸古午後語工公広交光考行高黄合谷国黒今才細作算止市矢姉思紙寺自時室社弱首秋週春書少場色食心新親図数西声星晴切雪船線前組走多太体台地池知茶昼長鳥朝直通弟店点電刀冬当東答頭同道読内南肉馬売買麦半番父風分聞米歩母方北毎妹万明鳴毛門夜野友用曜来里理話',
+    3:'悪安暗医委意育員院飲運泳駅央横屋温化荷界開階寒感漢館岸起期客究急級宮球去橋業曲局銀区苦具君係軽血決研県庫湖向幸港号根祭皿仕死使始指歯詩次事持式実写者主守取酒受州拾終習集住重宿所暑助昭消商章勝乗植申身神真深進世整昔全相送想息速族他打対待代第題炭短談着注柱丁帳調追定庭笛鉄転都度投豆島湯登等動童農波配倍箱畑発反坂板皮悲美鼻筆氷表秒病品負部服福物平返勉放味命面問役薬由油有遊予羊洋葉陽様落流旅両緑礼列練路和',
+    4:'愛案以衣位印英栄塩億加果貨課芽改械害街各覚完官管関観願希季旗器機議求泣給挙漁共協鏡競極訓軍郡径景芸欠結建健験固功好候康差菜最材昨札刷察参産散残氏司試児治辞失借種周祝順初松笑唱焼照臣信成省清静席積折節説浅戦選然争倉巣束側続卒孫帯隊達単置仲兆低底的典伝徒努灯働特熱念敗梅博飯飛必票標不夫付府副兵別辺変便包法望牧末満未民無約勇要養浴利陸良料量輪類令冷例連老労録茨媛岡潟岐熊香佐埼崎滋鹿縄井沖栃奈梨阪阜賀群徳富城',
+    5:'圧移因永営衛易益液演応往桜可仮価河過快解格確額刊幹慣眼基寄規技義逆久旧居許境均禁句経潔件険検限現減故個護効厚耕鉱構興講混査再災妻採際在財罪雑酸賛支志枝師資飼示似識質舎謝授修述術準序招証条状常情織職制性政勢精製税責績接設絶祖素総造像増則測属率損貸態団断築張提程適統銅導独任燃能破犯判版比肥非備評貧布婦武復複仏編弁保墓報豊防貿暴務夢迷綿輸余容略留領停史告喜囲型堂士得救歴殺毒粉紀脈航象貯費賞',
+    6:'異遺域宇映延沿我灰拡革閣割株干巻看簡危机揮貴疑吸供胸郷勤筋系敬警劇激穴絹権憲源厳己呼誤后孝皇紅降鋼刻穀骨困砂座済裁策冊蚕至私姿視詞誌磁射捨尺若樹収宗就衆従縦縮熟純処署諸除将傷障蒸針仁垂推寸盛聖誠宣専泉洗染善奏窓創装層操蔵臓存尊宅担探誕段暖値宙忠著庁頂潮賃痛展討党糖届難乳認納脳派拝背肺俳班晩否批秘腹奮並陛閉片補暮宝訪亡忘棒枚幕密盟模訳郵優幼欲翌乱卵覧裏律臨朗論俵券恩承敵胃腸舌退銭預'
+  };
+
+  const PRIMARY_CUMULATIVE_KANJI = (()=>{
+    const out={};
+    let s='';
+    for(let grade=1;grade<=6;grade++){
+      s += PRIMARY_GRADE_KANJI[grade];
+      out[grade]=new Set([...s]);
+    }
+    return out;
+  })();
+
+  function isHanCharacter(ch){
+    return /\p{Script=Han}/u.test(ch);
+  }
+
+  function disallowedKanji(text,grade=currentGradeValue()){
+    if(grade>6) return [];
+    const allowed=PRIMARY_CUMULATIVE_KANJI[grade] || new Set();
+    return [...new Set(
+      [...String(text||'')].filter(ch=>isHanCharacter(ch) && !allowed.has(ch))
+    )];
+  }
+
+  function gradeKanjiCheckSummary(text,grade=currentGradeValue()){
+    const bad=disallowedKanji(text,grade);
+    return {
+      ok:bad.length===0,
+      forbidden:bad,
+      label:GRADE_LABELS[grade] || ''
+    };
+  }
+
   function loadGradeSetting(){
     let v=5;
     try{
@@ -968,7 +1040,10 @@
 - 内容の正確さや原文の意味は変えない。
 - 対象学年より難しい語、熟語、漢字、文法的な組み立て、表現技法を説明に使わない。
 - どうしても必要な固有名詞・正式名称・数式記号・専門用語は残してよい。ただし、直後に対象学年までの言葉で意味をひらく。
-- 小学校段階では、原則としてその学年までの学年別漢字配当表にない漢字は、ひらがな又はより易しい同義語に直す。固有名詞などで残す場合は読みを添える。
+- 小学校段階では、その学年までの学年別漢字配当表にない漢字を説明本文に残してはいけない。
+- 普通の言葉に未習漢字がある場合は、対象学年までに読める別の言葉へ置き換える。
+- 専門用語、正式名称、分類名など、別の言葉へ変えると正確さを失うキーワードに未習漢字が含まれる場合は、その用語全体を正しい読みのひらがなにする。未習漢字だけを一文字ずつ仮名にして不自然な混ぜ書きにしてはいけない。
+  例：小学3年で「裸子植物」と書きたい場合は「ら子植物」ではなく「らししょくぶつ」とする。「被子植物」は「ひししょくぶつ」とする。
 - 熟語の各文字が読めても、その熟語の意味が対象学年には難しい場合は、その熟語を使わず、やさしい複数の言葉へひらく。
 - 一文を長くしすぎない。主語と述語、修飾する言葉とされる言葉の関係が分かる文にする。
 - 最後に出力前の自己点検を行い、対象学年より先で学ぶ表現が一つでもあれば、対象学年までの表現へ書き直してから答える。
@@ -1651,6 +1726,10 @@
 
   function startBubbleDrag(ev, captureEl){
     if(ev.button!==0) return;
+
+    // AIボタン、リンク、選択中テキストなど、操作対象そのものでは移動を開始しない。
+    if(ev.target.closest('button,a,input,select,textarea,.bubble-text')) return;
+
     ev.preventDefault();
     bubbleManual=true;
     bubbleDragState={
@@ -1684,14 +1763,9 @@
     updateBubbleShape();
   }
 
-  bubbleDragHandle.addEventListener('pointerdown',ev=>startBubbleDrag(ev,bubbleDragHandle));
-  bubbleDragHandle.addEventListener('pointermove',moveBubbleDrag);
-  bubbleDragHandle.addEventListener('pointerup',endBubbleDrag);
-  bubbleDragHandle.addEventListener('pointercancel',resetBubblePointerStates);
-
+  // 上部：6つのボタンそのもの以外の余白で移動
   const bubbleToolbar=$('.bubble-toolbar');
   bubbleToolbar.addEventListener('pointerdown',ev=>{
-    // ボタンそのものを押したときはAI操作。空白部分だけドラッグ移動。
     if(ev.target.closest('button')) return;
     startBubbleDrag(ev,bubbleToolbar);
   });
@@ -1699,10 +1773,39 @@
   bubbleToolbar.addEventListener('pointerup',endBubbleDrag);
   bubbleToolbar.addEventListener('pointercancel',resetBubblePointerStates);
 
+  // 本文：文字そのものではなく、文字の周囲の余白で移動
+  const bubbleBody=$('.bubble-body');
+  bubbleBody.addEventListener('pointerdown',ev=>{
+    if(ev.target.closest('.bubble-text,a,button')) return;
+    startBubbleDrag(ev,bubbleBody);
+  });
+  bubbleBody.addEventListener('pointermove',moveBubbleDrag);
+  bubbleBody.addEventListener('pointerup',endBubbleDrag);
+  bubbleBody.addEventListener('pointercancel',resetBubblePointerStates);
+
+  // bubble本体の、toolbar/body以外の余白も移動可能にする。
+  bubble.addEventListener('pointerdown',ev=>{
+    if(
+      ev.target.closest(
+        'button,a,input,select,textarea,.bubble-text,.bubble-resize-left,.bubble-resize-right,'+
+        '.bubble-resize-top,.bubble-resize-bottom,.bubble-resize-corner'
+      )
+    ) return;
+
+    if(ev.target===bubble || ev.target===bubbleShapeLayer || ev.target===bubbleShapePath){
+      startBubbleDrag(ev,bubble);
+    }
+  });
+  bubble.addEventListener('pointermove',moveBubbleDrag);
+  bubble.addEventListener('pointerup',endBubbleDrag);
+  bubble.addEventListener('pointercancel',resetBubblePointerStates);
+
+
   function startBubbleResize(ev, mode, captureEl){
     if(ev.button!==0) return;
     ev.preventDefault();
     ev.stopPropagation();
+
     bubbleManual=true;
     bubbleResizeState={
       pointerId:ev.pointerId,
@@ -1710,6 +1813,8 @@
       captureEl,
       startX:ev.clientX,
       startY:ev.clientY,
+      left:bubble.offsetLeft,
+      top:bubble.offsetTop,
       width:bubble.offsetWidth,
       height:bubble.offsetHeight
     };
@@ -1719,29 +1824,55 @@
 
   function moveBubbleResize(ev){
     if(!bubbleResizeState || ev.pointerId!==bubbleResizeState.pointerId) return;
+
     const wr=workspace.getBoundingClientRect();
     const margin=8;
-    const maxW=Math.max(300,wr.width-bubble.offsetLeft-margin);
-    const maxH=Math.max(190,wr.height-bubble.offsetTop-margin);
+    const minW=300;
+    const minH=190;
 
-    let w=bubbleResizeState.width;
-    let h=bubbleResizeState.height;
+    const s=bubbleResizeState;
+    const dx=ev.clientX-s.startX;
+    const dy=ev.clientY-s.startY;
 
-    if(bubbleResizeState.mode==='right' || bubbleResizeState.mode==='corner'){
-      w=clamp(
-        bubbleResizeState.width+(ev.clientX-bubbleResizeState.startX),
-        300,maxW
-      );
+    let left=s.left;
+    let top=s.top;
+    let width=s.width;
+    let height=s.height;
+
+    const resizeLeft=s.mode.includes('left');
+    const resizeRight=s.mode.includes('right');
+    const resizeTop=s.mode.includes('top');
+    const resizeBottom=s.mode.includes('bottom');
+
+    if(resizeRight){
+      width=clamp(s.width+dx,minW,Math.max(minW,wr.width-s.left-margin));
     }
-    if(bubbleResizeState.mode==='bottom' || bubbleResizeState.mode==='corner'){
-      h=clamp(
-        bubbleResizeState.height+(ev.clientY-bubbleResizeState.startY),
-        190,maxH
-      );
+
+    if(resizeBottom){
+      height=clamp(s.height+dy,minH,Math.max(minH,wr.height-s.top-margin));
     }
 
-    bubble.style.width=Math.round(w)+'px';
-    bubble.style.height=Math.round(h)+'px';
+    if(resizeLeft){
+      const maxLeftShift=s.width-minW;
+      const minDx=margin-s.left;
+      const appliedDx=clamp(dx,minDx,maxLeftShift);
+      left=s.left+appliedDx;
+      width=s.width-appliedDx;
+    }
+
+    if(resizeTop){
+      const maxTopShift=s.height-minH;
+      const minDy=margin-s.top;
+      const appliedDy=clamp(dy,minDy,maxTopShift);
+      top=s.top+appliedDy;
+      height=s.height-appliedDy;
+    }
+
+    bubble.style.left=Math.round(left)+'px';
+    bubble.style.top=Math.round(top)+'px';
+    bubble.style.width=Math.round(width)+'px';
+    bubble.style.height=Math.round(height)+'px';
+
     updateBubbleShape();
   }
 
@@ -1754,9 +1885,14 @@
   }
 
   [
+    [bubbleResizeLeft,'left'],
     [bubbleResizeRight,'right'],
+    [bubbleResizeTop,'top'],
     [bubbleResizeBottom,'bottom'],
-    [bubbleResizeHandle,'corner']
+    [bubbleResizeNW,'top-left'],
+    [bubbleResizeNE,'top-right'],
+    [bubbleResizeSW,'bottom-left'],
+    [bubbleResizeSE,'bottom-right']
   ].forEach(([el,mode])=>{
     el.addEventListener('pointerdown',ev=>startBubbleResize(ev,mode,el));
     el.addEventListener('pointermove',moveBubbleResize);
@@ -2329,7 +2465,10 @@ ${selected ? '今回は反転選択された部分を中心に検証してくだ
       const stream=session.promptStreaming(multimodalPrompt);
       for await (const chunk of stream){
         full += String(chunk||'');
-        bubbleText.textContent=full;
+        // 小学校設定では、配当漢字の機械チェック前の文章を画面に出さない。
+        if(currentGradeValue()>6){
+          bubbleText.textContent=full;
+        }
       }
       if(!full.trim()) throw new Error('Chrome内蔵AIから文章が返りませんでした。');
       if(action==='verify'){
@@ -2638,6 +2777,154 @@ ${selected ? '今回は反転選択された部分を中心に検証してくだ
     if(p==='gemini-free') return callGeminiFree(action, selectedText);
     if(p==='gemini') return callGemini(action, selectedText);
     return callOpenAI(action, selectedText);
+  }
+
+
+  function gradeRepairPrompt(text,forbidden,grade=currentGradeValue(),finalPass=false){
+    const allowed=grade<=6
+      ? [...(PRIMARY_CUMULATIVE_KANJI[grade]||[])].join('')
+      : '';
+
+    return `次の文章を「${currentGradeLabel()}」までの国語の学習範囲に、厳密に書き直してください。
+
+【元の文章】
+${text}
+
+【機械チェックで見つかった、この学年ではまだ使わない漢字】
+${forbidden.join('、')}
+
+【この学年までに使ってよい漢字】
+${allowed}
+
+必ず守ること：
+1. 上の「まだ使わない漢字」を、返答に一字も残さないでください。
+2. 書き直した結果に、別の未習漢字を新しく入れないでください。
+3. 普通の言葉なら、この学年までの漢字・ひらがなを使った、よりやさしい言葉へ置き換えてください。
+4. 専門用語・正式名称・分類名・学術的なキーワードなど、別の言葉にすると意味が変わる語に未習漢字が一字でも含まれる場合は、そのキーワード全体を正しい読みのひらがなにしてください。
+   例：小学3年なら「裸子植物」→「らししょくぶつ」、「被子植物」→「ひししょくぶつ」、「維管束植物」→「いかんそくしょくぶつ」。
+5. 「ら子植物」のように、用語の一部だけをひらがなにする不自然な混ぜ書きは禁止です。
+6. 固有名詞も、説明に不可欠で未習漢字を含む場合は、必要に応じて正しい読みのひらがなにしてください。
+7. 内容、数値、因果関係、元の結論は変えないでください。
+8. 「です」「ます」調の丁寧な話し言葉にしてください。
+9. 見出しも学年制約の対象です。見出しに未習漢字を残さないでください。
+10. 書き直した本文だけを返してください。説明、注記、チェック結果は付けないでください。
+${finalPass ? '11. 最終確認です。漢字を減らすことを最優先し、迷う言葉はひらがなにしてください。' : ''}`;
+  }
+
+  async function callPlainAI(prompt){
+    const p=currentProvider();
+
+    if(p==='chromeai'){
+      const session=await getChromeAISession();
+      const text=await session.prompt(prompt);
+      if(!text || !String(text).trim()) throw new Error('Chrome内蔵AIから文章が返りませんでした。');
+      return String(text).trim();
+    }
+
+    if(p==='gemini-free'){
+      if(!geminiFreeKey) throw new Error('API Key未設定');
+      const url='https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent';
+      const res=await fetch(url,{
+        method:'POST',
+        headers:{
+          'x-goog-api-key':geminiFreeKey,
+          'Content-Type':'application/json'
+        },
+        body:JSON.stringify({
+          contents:[{role:'user',parts:[{text:prompt}]}],
+          generationConfig:{temperature:0.05}
+        })
+      });
+      const raw=await res.text();
+      let data;
+      try{data=JSON.parse(raw)}catch{data={error:{message:raw}}}
+      if(!res.ok) throw friendlyGeminiError(res,data);
+      return extractGeminiText(data);
+    }
+
+    if(p==='gemini'){
+      if(!geminiKey) throw new Error('API Key未設定');
+      const {res,data}=await geminiRequest({
+        contents:[{role:'user',parts:[{text:prompt}]}],
+        generationConfig:{temperature:0.05}
+      });
+      if(!res.ok) throw friendlyGeminiError(res,data);
+      return extractGeminiText(data);
+    }
+
+    if(!openAIKey) throw new Error('API Key未設定');
+    const res=await fetch('https://api.openai.com/v1/responses',{
+      method:'POST',
+      headers:{
+        'Authorization':`Bearer ${openAIKey}`,
+        'Content-Type':'application/json'
+      },
+      body:JSON.stringify({
+        model:modelSelect.value,
+        reasoning:{effort:'low'},
+        input:prompt
+      })
+    });
+    const raw=await res.text();
+    let data;
+    try{data=JSON.parse(raw)}catch{data={error:{message:raw}}}
+    if(!res.ok) throw friendlyOpenAIError(res,data);
+    return extractOpenAIText(data);
+  }
+
+  async function enforceGradeKanji(text){
+    const grade=currentGradeValue();
+    let current=String(text||'').trim();
+
+    // 中学校には小学校のような「字ごとの学年別配当」がないため、
+    // 機械的な1字照合は小3〜小6で行う。
+    if(grade>6 || !current){
+      return {text:current, repaired:false, rounds:0, remaining:[]};
+    }
+
+    let forbidden=disallowedKanji(current,grade);
+    if(!forbidden.length){
+      return {text:current, repaired:false, rounds:0, remaining:[]};
+    }
+
+    let rounds=0;
+    const maxRounds=4;
+
+    while(forbidden.length && rounds<maxRounds){
+      rounds++;
+
+      if(working){
+        bubbleText.innerHTML=
+          `<span class="loading-row"><span class="spinner"></span>${escapeHTML(currentGradeLabel())}までの漢字を確認しています… ${rounds}/${maxRounds}</span>`;
+      }
+
+      const prompt=gradeRepairPrompt(
+        current,
+        forbidden,
+        grade,
+        rounds===maxRounds
+      );
+
+      current=(await callPlainAI(prompt)).trim();
+      forbidden=disallowedKanji(current,grade);
+    }
+
+    if(forbidden.length){
+      // ここまで残る場合は、AIが制約を守れていないことを隠さずエラーにする。
+      // 未習漢字をそのまま表示するより安全。
+      const e=new Error(
+        `${currentGradeLabel()}ではまだ使わない漢字が残りました：${forbidden.join('、')}。もう一度ボタンを押してください。`
+      );
+      e.kind='grade-kanji';
+      throw e;
+    }
+
+    return {
+      text:current,
+      repaired:true,
+      rounds,
+      remaining:[]
+    };
   }
 
   function safeHttpUrl(value){
@@ -2966,6 +3253,16 @@ ${selected ? '今回は反転選択された部分を中心に検証してくだ
       try{
         const rawOutput=await callAI(action, selectedText);
         const result=normalizeAIResult(rawOutput);
+
+        const gradeCheck=await enforceGradeKanji(result.text);
+        result.text=gradeCheck.text;
+
+        // 書き直すと検索回答の文字位置が変わるため、本文中の位置指定引用だけ外す。
+        // 下部の「参照資料」リンクはそのまま保持する。
+        if(gradeCheck.repaired){
+          result.citations=[];
+        }
+
         const output=result.text;
 
         state.currentText=output;
@@ -2994,6 +3291,7 @@ ${selected ? '今回は反転選択された部分を中心に検証してくだ
         const extra=[
           selectedText ? '吹き出し内の反転選択部分のみを対象' : '',
           action==='verify' ? (result.searched ? '外部資料検索あり' : '外部資料検索なし') : '',
+          gradeCheck.repaired ? `学年漢字チェックで自動修正 ${gradeCheck.rounds}回` : '学年漢字チェック合格',
           sourceSummary
         ].filter(Boolean).join(' | ');
 
@@ -3012,6 +3310,10 @@ ${selected ? '今回は反転選択された部分を中心に検証してくだ
         if(e.message!=='API Key未設定'){
           if(e.kind==='billing'){
             await replaceBubbleText('OpenAI API Keyは届いていますが、API残高がありません。\n\n⚙ 設定でGeminiに切り替えることもできます。');
+          }else if(e.kind==='grade-kanji'){
+            await replaceBubbleText(
+              '学年に合わせた漢字の書き直しが完了しませんでした。\n\n'+e.message
+            );
           }else{
             const aiName=providerName();
             await replaceBubbleText(aiName+'を利用できませんでした。\n\n'+e.message);
