@@ -518,6 +518,53 @@
     font:inherit;
     background:#fff;
   }
+  .grade-setting{
+    margin:15px 0 17px;
+    padding:12px 12px 10px;
+    border:1px solid #d5d5d5;
+    border-radius:13px;
+    background:#fafaf8;
+  }
+  .grade-setting-head{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:10px;
+    margin-bottom:8px;
+  }
+  .grade-setting-head label{margin:0!important}
+  .grade-current{
+    font-size:14px;
+    font-weight:900;
+    color:#111;
+    white-space:nowrap;
+  }
+  .grade-range{
+    width:100%;
+    padding:0!important;
+    border:0!important;
+    border-radius:0!important;
+    background:transparent!important;
+    accent-color:#111;
+    cursor:pointer;
+  }
+  .grade-ticks{
+    display:grid;
+    grid-template-columns:repeat(7,1fr);
+    margin-top:5px;
+    color:#777;
+    font-size:9px;
+    line-height:1.25;
+    text-align:center;
+    user-select:none;
+  }
+  .grade-ticks span.active{color:#111;font-weight:900}
+  .grade-note{
+    margin-top:9px;
+    color:#666;
+    font-size:10px;
+    line-height:1.6;
+  }
   .key-wrap{display:flex;gap:7px}
   .key-wrap input{flex:1}
   .mini-btn{
@@ -635,7 +682,7 @@
     <div class="help-steps">
       <div class="help-step"><span>1</span><b>画面を取り込む</b><small>ブラウザ、PDF、スライドなど、読みたい画面を選びます。</small></div>
       <div class="help-step"><span>2</span><b>文章を囲む</b><small>読みたい部分をドラッグで矩形選択すると、自動で文字を読み取ります。</small></div>
-      <div class="help-step"><span>3</span><b>ボタンで問いかける</b><small>目的に合うボタンを押すと、同じ吹き出しの中で説明が変わります。</small></div>
+      <div class="help-step"><span>3</span><b>ボタンで問いかける</b><small>目的に合うボタンを押すと、設定した学年までの国語表現で説明が変わります。</small></div>
     </div>
 
     <div class="help-section-title">6つのボタンは何をしている？</div>
@@ -680,13 +727,17 @@
         <p>上のグレーのバー、またはボタンのない空白部分をドラッグして移動できます。右端・下端・右下をドラッグすると大きさを変えられます。</p>
       </div>
       <div class="help-tip">
+        <b>説明する学年を選べます</b>
+        <p>小学3年から中学3年までを設定できます。語彙だけでなく、漢字・熟語・文の組み立て・比喩などの表現技法も、その学年までの国語の学習内容に合わせます。初期値は小学5年です。</p>
+      </div>
+      <div class="help-tip">
         <b>設定ではAIと履歴を管理できます</b>
-        <p>Chrome内蔵AI、Gemini、OpenAIを切り替えられます。やりとりは時刻・使用AI・選択部分などとともにCSVで保存できます。</p>
+        <p>Chrome内蔵AI、Gemini、OpenAIを切り替えられます。やりとりは時刻・使用AI・選択部分・説明学年などとともにCSVで保存できます。</p>
       </div>
     </div>
 
     <div class="help-footer-note">
-      説明の語彙と前提知識は、おおむね小学5年生までを想定し、言葉遣いは丁寧な「です・ます」調にしています。
+      説明の語彙・漢字・熟語・文の構成・表現技法は、設定で選んだ学年までの国語の学習内容を基準にします。言葉遣いは丁寧な「です・ます」調です。
     </div>
   </div>
 </div>
@@ -729,6 +780,24 @@
       <select id="model"></select>
     </div>
 
+    <div class="grade-setting">
+      <div class="grade-setting-head">
+        <label for="gradeLevel">説明の学年</label>
+        <output id="gradeLabel" class="grade-current" for="gradeLevel">小学5年</output>
+      </div>
+      <input id="gradeLevel" class="grade-range" type="range" min="3" max="9" step="1" value="5"
+             aria-label="説明に使う国語の学年">
+      <div id="gradeTicks" class="grade-ticks" aria-hidden="true">
+        <span>小3</span><span>小4</span><span>小5</span><span>小6</span>
+        <span>中1</span><span>中2</span><span>中3</span>
+      </div>
+      <div class="grade-note">
+        文部科学省の現行学習指導要領（平成29年告示）国語を基準に、
+        漢字・熟語・語彙・文の構成・表現技法をこの学年までに合わせます。
+        小学校は学年別漢字配当表を上限の目安にします。
+      </div>
+    </div>
+
     <div id="searchGroundingField" class="field">
       <label>「ほんとうに？」のWeb確認</label>
       <label style="display:flex;align-items:flex-start;gap:8px;font-weight:500;line-height:1.5">
@@ -743,7 +812,7 @@
     <div class="help">
       <b>やりとりの記録</b>
       <div class="free-note">
-        OCRした文章、押したボタン、AIへの入力、AIの返答、時刻、AI設定をこのタブ内で記録します。
+        OCRした文章、押したボタン、AIへの入力、AIの返答、時刻、AI設定、説明学年をこのタブ内で記録します。
       </div>
       <div style="height:8px"></div>
       <button id="downloadCsv" class="save-btn" type="button">履歴をCSVで保存</button>
@@ -801,6 +870,9 @@
   const apiKeyLabel = $('#apiKeyLabel');
   const apiKeyInput = $('#apiKey');
   const modelSelect = $('#model');
+  const gradeSlider = $('#gradeLevel');
+  const gradeLabel = $('#gradeLabel');
+  const gradeTicks = $('#gradeTicks');
   const saveSettings = $('#saveSettings');
   const settingsState = $('#settingsState');
   const toggleKey = $('#toggleKey');
@@ -835,6 +907,140 @@
   // Chrome内蔵AIは一度だけ作って使い回す
   let chromeAISession = null;
   let chromeAIInitPromise = null;
+
+  const GRADE_LABELS={
+    3:'小学3年',
+    4:'小学4年',
+    5:'小学5年',
+    6:'小学6年',
+    7:'中学1年',
+    8:'中学2年',
+    9:'中学3年'
+  };
+
+  const GRADE_KANJI_COUNTS={
+    3:'第1〜3学年の配当漢字（累計440字）',
+    4:'第1〜4学年の配当漢字（累計642字）',
+    5:'第1〜5学年の配当漢字（累計835字）',
+    6:'小学校の学年別漢字配当表1026字',
+    7:'小学校配当漢字に加え、常用漢字300〜400字程度を読む段階',
+    8:'中学1年までに学習した常用漢字に加え、350〜450字程度を読む段階',
+    9:'その他の常用漢字の大体を読む段階'
+  };
+
+  function loadGradeSetting(){
+    let v=5;
+    try{
+      const saved=Number(localStorage.getItem('kotobaHirakuGrade'));
+      if(Number.isInteger(saved) && saved>=3 && saved<=9) v=saved;
+    }catch(_e){}
+    return v;
+  }
+
+  let explanationGrade=loadGradeSetting();
+
+  function currentGradeValue(){
+    return explanationGrade;
+  }
+
+  function currentGradeLabel(){
+    return GRADE_LABELS[currentGradeValue()] || '小学5年';
+  }
+
+  function updateGradeUI(){
+    if(!gradeSlider) return;
+    gradeSlider.value=String(explanationGrade);
+    if(gradeLabel) gradeLabel.textContent=currentGradeLabel();
+    if(gradeTicks){
+      [...gradeTicks.children].forEach((el,i)=>{
+        el.classList.toggle('active',i===(explanationGrade-3));
+      });
+    }
+  }
+
+  function curriculumProfile(grade=currentGradeValue()){
+    const common=`【学年制約：最優先】
+対象は「${GRADE_LABELS[grade]}」までの国語学習です。
+これは文章を短くするだけの設定ではありません。説明文そのものの漢字、熟語、語彙、文の組み立て、文章の展開、表現技法を、この学年までに学ぶ範囲へ合わせてください。
+
+共通ルール：
+- 言葉遣いは、丁寧な話し言葉の「です・ます」調にする。
+- 内容の正確さや原文の意味は変えない。
+- 対象学年より難しい語、熟語、漢字、文法的な組み立て、表現技法を説明に使わない。
+- どうしても必要な固有名詞・正式名称・数式記号・専門用語は残してよい。ただし、直後に対象学年までの言葉で意味をひらく。
+- 小学校段階では、原則としてその学年までの学年別漢字配当表にない漢字は、ひらがな又はより易しい同義語に直す。固有名詞などで残す場合は読みを添える。
+- 熟語の各文字が読めても、その熟語の意味が対象学年には難しい場合は、その熟語を使わず、やさしい複数の言葉へひらく。
+- 一文を長くしすぎない。主語と述語、修飾する言葉とされる言葉の関係が分かる文にする。
+- 最後に出力前の自己点検を行い、対象学年より先で学ぶ表現が一つでもあれば、対象学年までの表現へ書き直してから答える。
+- この学年チェックを行ったこと自体は、返答本文に書かない。`;
+
+    const profiles={
+      3:`${common}
+
+【小学3年まで】
+漢字：${GRADE_KANJI_COUNTS[3]}までを基本にする。
+語彙・熟語：日常生活、学校生活、身近な自然や社会で使う具体的な言葉を中心にする。漢字の熟語を使うときも、意味をそのまま想像しにくい抽象的な熟語は避ける。
+文の構成：主語と述語の対応をはっきりさせる。修飾する言葉が何を説明しているかを近くに置く。指示語や接続語は「これ」「そのため」「だから」「しかし」など意味が追いやすいものを使う。段落は一つの中心内容をもつようにする。
+文章の展開：「まず」「次に」「だから」など、出来事や理由の順序が見える展開にする。
+表現技法：「比喩」「反復」「倒置」「体言止め」という専門名称を理解済みとは扱わない。必要なら「〜のようにたとえています」「同じ言葉をくり返しています」のように名称を使わず説明する。`,
+
+      4:`${common}
+
+【小学4年まで】
+漢字：${GRADE_KANJI_COUNTS[4]}までを基本にする。
+語彙・熟語：第3・4学年で増える漢字の熟語を使えるが、抽象度の高い語や意味を推測しにくい熟語は、具体的な言葉へひらく。
+文の構成：主語と述語、修飾と被修飾の関係を明確にする。指示語・接続語を使って文と文のつながりを示す。段落どうしの関係や中心となる内容が追えるようにする。
+文章の展開：理由、例、結論の順序が見える簡単な構成にする。説明が飛ばないようにする。
+表現技法：「比喩」「反復」「倒置」「体言止め」の名称を前提知識にしない。たとえやくり返しを使う場合は、何を表しているのか本文から分かる形にする。`,
+
+      5:`${common}
+
+【小学5年まで】
+漢字：${GRADE_KANJI_COUNTS[5]}までを基本にする。
+語彙・熟語：日常・学校・社会・科学で使う語を広げてよいが、抽象的な熟語は具体的な出来事や動作に置き換える。思考に関わる言葉も、意味が一読で分かるものを選ぶ。
+文の構成：語句と語句の関係、語順、文と文のつながりを明確にし、文章全体の構成が見えるようにする。主語が省かれて分かりにくくならないようにする。
+文章の展開：事実と考え、理由と結論、例と説明を分け、段落の役割が追えるようにする。
+表現技法：比喩や反復などの「表現の工夫」に気付く段階として扱う。「比喩」「反復」を使う場合は意味もやさしく示す。倒置・体言止めは名称を既習として前提にせず、「語順を変えた言い方」「名詞で文を止めた言い方」のようにひらく。`,
+
+      6:`${common}
+
+【小学6年まで】
+漢字：${GRADE_KANJI_COUNTS[6]}までを基本にする。
+語彙・熟語：小学校段階の語彙を十分に使ってよいが、中学校段階の抽象語・専門的な熟語を説明なしで置かない。
+文の構成：文中の語句の係り方、語順、文と文の関係、文章の様々な構成を意識し、読み手が筋道を追える形にする。日常的な敬語も適切に使う。
+文章の展開：原因と結果、事実と考え、具体例とまとめの関係を明示し、文章全体の構成を見通しやすくする。
+表現技法：比喩や反復などの表現の工夫は扱ってよい。倒置や体言止めを使う必要がある場合は、名称だけに頼らず、どのような言い方かをやさしく説明する。`,
+
+      7:`${common}
+
+【中学1年まで】
+漢字：${GRADE_KANJI_COUNTS[7]}を目安にする。難しい常用漢字を無理に使わず、読みやすさを優先する。
+語彙・熟語：事象や行為を表す多様な語句を使ってよい。辞書的な意味と文脈上の意味が異なる語は、その文での意味が分かるようにする。
+文の構成：段落の役割、文と文の接続、指示語・接続する語句、単語の類別を踏まえ、全体と部分、事実と意見、原因と結果、意見と根拠の関係を追える構成にする。
+文章の展開：中心部分と補足部分を分け、要点や要旨が分かるようにする。
+表現技法：比喩、反復、倒置、体言止めなどの名称と働きを使ってよい。ただし説明のために必要な場合だけ使い、名称を並べるだけにしない。`,
+
+      8:`${common}
+
+【中学2年まで】
+漢字：${GRADE_KANJI_COUNTS[8]}を目安にする。
+語彙・熟語：抽象的な概念を表す語、類義語・対義語、同音異義語、多義語を扱ってよい。ただし必要以上に抽象語を重ねず、具体例との対応を示す。
+文の構成：単語の活用、助詞・助動詞、文の成分の順序や照応を踏まえ、複文でも関係が明確になるようにする。話や文章の構成・展開を意識する。
+文章の展開：意見と根拠、具体と抽象など、情報どうしの関係を明示する。論理の飛躍を避ける。
+表現技法：比喩、反復、倒置、体言止めなどを理解済みとして使えるが、読みやすさを優先する。`,
+
+      9:`${common}
+
+【中学3年まで】
+漢字：${GRADE_KANJI_COUNTS[9]}を目安にする。
+語彙・熟語：慣用句や四字熟語、和語・漢語・外来語の使い分けを含む中学校段階の語彙を使ってよい。ただし、難解な専門語を説明なしで置かない。
+文の構成：話や文章の種類と特徴を踏まえ、目的に合った文型と構成を選ぶ。複雑な文でも照応関係を明確にする。
+文章の展開：論理の展開、事実・根拠・主張の関係を明確にし、必要なら複数の見方を整理する。
+表現技法：比喩、反復、倒置、体言止めなどの効果を理解した表現を使ってよい。ただし、説明文では効果より明瞭さを優先する。`
+    };
+
+    return profiles[grade] || profiles[5];
+  }
 
   let state = freshState();
 
@@ -883,6 +1089,8 @@
       provider: providerName ? providerName() : '',
       provider_id: currentProvider ? currentProvider() : '',
       model: currentModelLabel(),
+      grade_value: currentGradeValue(),
+      grade_label: currentGradeLabel(),
       input: input || '',
       output: output || '',
       original_text: state.originalText || '',
@@ -912,6 +1120,8 @@
       'provider',
       'provider_id',
       'model',
+      'grade_value',
+      'grade_label',
       'original_text',
       'selected_text',
       'input',
@@ -930,6 +1140,8 @@
         r.provider,
         r.provider_id,
         r.model,
+        r.grade_value,
+        r.grade_label,
         r.original_text,
         r.selected_text,
         r.input,
@@ -1606,9 +1818,11 @@
     const previousOutput=lastTransform?.output || fullCurrent;
 
     const scopeNote = selected ? `\n\n【今回、読み手が反転選択した部分】\n${selected}\n\n今回はこの選択部分だけについて答えてください。選択されていない周囲の文章へ話を広げすぎないでください。` : '';
+    const curriculum=curriculumProfile();
 
     const base=`あなたは、文章を丁寧に説明する先生です。
-読み手の知識量と語彙は、おおむね小学5年生までを前提にしてください。
+
+${curriculum}
 
 大切なルール：
 - 言葉遣いは、丁寧で落ち着いた「です・ます」調にする。
@@ -1667,7 +1881,7 @@ ${selected ? `\n【読み手が分からないと示した反転選択部分】\
 重要：
 - ${selected ? '今回は反転選択された部分に焦点を当てて説明を作り直す。' : 'さきほどの説明文を単に言い換えるのではなく、一つ前の文章から説明を作り直す。'}
 - 何が難しかったかを勝手に決めつけない。
-- 語彙と前提知識は小学5年生程度までにする。
+- 語彙・漢字・熟語・文の構成・表現技法は、現在の学年設定に合わせる。
 - 丁寧な「です・ます」調にする。
 - できるだけ具体的にしながらも、長くしすぎない。
 - 吹き出しにそのまま表示する返答だけを書く。`;
@@ -1717,7 +1931,8 @@ ${current}${scopeNote}`;
     }
 
     return `あなたは、文章の意味と事実関係を丁寧に検証する先生です。
-読み手の知識量と語彙は、おおむね小学5年生までを前提にしてください。
+
+${curriculum}
 
 読み手が「ほんとうに？」とたずねました。
 このボタンでは、必ず次の2段階で考えてください。
@@ -1766,7 +1981,9 @@ ${selected ? '今回は反転選択された部分を中心に検証してくだ
 - 出典URLを本文中に自分で作ったり推測したりしない。リンクはアプリ側が検索結果のメタデータから表示する。
 - 情報源の名前は本文中で自然に触れてよいが、URL一覧は本文に書かない。
 - 「うん」「ごめん」「〜なんだよ」など、くだけた言い方は使わない。
-- 丁寧な「です・ます」調にする。`;
+- 丁寧な「です・ます」調にする。
+- 外部資料の内容が難しくても、その説明本文は必ず現在の学年設定までの漢字・熟語・語彙・文の構成にひらいて書く。
+- 出力前に学年制約をもう一度点検し、対象学年より難しい表現が残っていれば書き直す。`;
   }
 
   const providerModels = {
@@ -2760,7 +2977,9 @@ ${selected ? '今回は反転選択された部分を中心に検証してくだ
           searched:result.searched,
           time:Date.now(),
           provider:providerName(),
-          model:currentModelLabel()
+          model:currentModelLabel(),
+          grade_value:currentGradeValue(),
+          grade_label:currentGradeLabel()
         });
 
         // 「わかった」「わからん」は説明命令ではないので、
@@ -2816,6 +3035,14 @@ ${selected ? '今回は反転選択された部分を中心に検証してくだ
 
   providerSelect.addEventListener('change',syncProviderUI);
   syncProviderUI();
+  updateGradeUI();
+
+  gradeSlider.addEventListener('input',()=>{
+    explanationGrade=Number(gradeSlider.value);
+    try{localStorage.setItem('kotobaHirakuGrade',String(explanationGrade))}catch(_e){}
+    updateGradeUI();
+    settingsState.textContent=`説明学年：${currentGradeLabel()} に設定しました。`;
+  });
 
   helpBtn.addEventListener('click',()=>{
     helpModal.classList.remove('hidden');
@@ -2883,7 +3110,13 @@ ${selected ? '今回は反転選択された部分を中心に検証してくだ
     try{
       const reply=await testAIConnection();
       settingsState.innerHTML='<span class="status-dot ok"></span>'+aiName+' 接続成功：'+escapeHTML(reply || '接続OK');
-      logInteraction('setting','AI設定','',aiName+' / '+currentModelLabel(),'接続テスト成功');
+      logInteraction(
+        'setting',
+        'AI設定',
+        '',
+        aiName+' / '+currentModelLabel()+' / 説明学年 '+currentGradeLabel(),
+        '接続テスト成功'
+      );
       setTimeout(closeSettingsModal,1000);
     }catch(e){
       console.error(e);
