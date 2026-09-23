@@ -290,6 +290,76 @@
   }
   @keyframes spin{to{transform:rotate(360deg)}}
 
+  /* ヘルプポップアップ */
+  .help-modal-back{
+    position:fixed;inset:0;background:rgba(0,0,0,.34);z-index:120;
+    display:grid;place-items:center;padding:20px;
+  }
+  .help-modal{
+    position:relative;
+    width:min(920px,95vw);
+    max-height:90vh;
+    overflow:auto;
+    background:#fff;
+    border:2px solid #111;
+    border-radius:24px;
+    box-shadow:10px 12px 0 rgba(0,0,0,.22);
+    padding:22px 24px 24px;
+  }
+  .help-modal-head{
+    display:flex;align-items:flex-start;justify-content:space-between;gap:18px;
+    padding-bottom:15px;border-bottom:1px solid #ddd;
+  }
+  .help-modal-head h2{margin:0 0 6px;font-size:22px}
+  .help-modal-head p{margin:0;color:#555;font-size:13px;line-height:1.6}
+  .help-close{
+    flex:0 0 auto;width:34px;height:34px;border-radius:50%;
+    border:1.5px solid #111;background:#fff;font-size:20px;cursor:pointer;
+  }
+  .help-steps{
+    display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:18px 0 22px;
+  }
+  .help-step{
+    position:relative;border:1.5px solid #111;border-radius:16px;
+    padding:14px 14px 14px 50px;min-height:94px;background:#fafaf8;
+  }
+  .help-step>span{
+    position:absolute;left:13px;top:14px;width:27px;height:27px;border-radius:50%;
+    background:#111;color:#fff;display:grid;place-items:center;font-weight:800;font-size:13px;
+  }
+  .help-step b{display:block;font-size:14px;margin-bottom:5px}
+  .help-step small{display:block;font-size:11px;line-height:1.55;color:#555}
+  .help-section-title{font-size:15px;font-weight:900;margin:2px 0 10px}
+  .help-cards{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .help-card{
+    display:grid;grid-template-columns:150px 1fr;gap:12px;align-items:start;
+    border:1px solid #ddd;border-radius:15px;padding:12px;background:#fff;
+  }
+  .help-button-sample{
+    display:inline-flex;align-items:center;justify-content:center;
+    min-height:39px;padding:7px 10px;border:1.5px solid #111;border-radius:999px;
+    font-size:12px;font-weight:900;white-space:nowrap;background:#fff;
+  }
+  .help-card b{font-size:13px}
+  .help-card p{margin:5px 0 0;font-size:11px;line-height:1.65;color:#505050}
+  .help-tips{
+    display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:18px;
+  }
+  .help-tip{
+    border:1px solid #ccc;border-radius:14px;background:#f7f7f4;padding:12px 13px;
+  }
+  .help-tip b{font-size:12px}
+  .help-tip p{margin:5px 0 0;font-size:11px;line-height:1.65;color:#555}
+  .help-footer-note{
+    margin-top:15px;padding-top:13px;border-top:1px solid #ddd;
+    font-size:11px;line-height:1.7;color:#666;
+  }
+  @media(max-width:720px){
+    .help-modal{padding:17px 15px 20px}
+    .help-steps,.help-cards,.help-tips{grid-template-columns:1fr}
+    .help-card{grid-template-columns:135px 1fr}
+  }
+
   /* QRコードポップアップ */
   .qr-modal-back{
     position:fixed;inset:0;background:rgba(0,0,0,.32);z-index:110;
@@ -413,6 +483,7 @@
   </div>
   <div class="header-actions">
     <button id="captureBtn" class="capture-btn" title="共有画面を選んだ後このアプリへ戻ります。選択範囲の文章・数式・図をAIが画像からも読み取ります">画面を取り込む</button>
+    <button id="helpBtn" class="icon-btn" aria-label="ヘルプ" title="使い方・各ボタンの説明">?</button>
     <button id="settingsBtn" class="icon-btn" aria-label="設定" title="設定">⚙</button>
   </div>
 </header>
@@ -447,6 +518,75 @@
     </div>
   </section>
 </main>
+
+<div id="helpModal" class="help-modal-back hidden" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+  <div class="help-modal">
+    <div class="help-modal-head">
+      <div>
+        <h2 id="helpTitle">「ことばをひらく」の使い方</h2>
+        <p>画面の文章を囲んで、分からないところをその場で別の言葉にひらきます。</p>
+      </div>
+      <button id="closeHelp" class="help-close" aria-label="閉じる">×</button>
+    </div>
+
+    <div class="help-steps">
+      <div class="help-step"><span>1</span><b>画面を取り込む</b><small>ブラウザ、PDF、スライドなど、読みたい画面を選びます。</small></div>
+      <div class="help-step"><span>2</span><b>文章を囲む</b><small>読みたい部分をドラッグで矩形選択すると、自動で文字を読み取ります。</small></div>
+      <div class="help-step"><span>3</span><b>ボタンで問いかける</b><small>目的に合うボタンを押すと、同じ吹き出しの中で説明が変わります。</small></div>
+    </div>
+
+    <div class="help-section-title">6つのボタンは何をしている？</div>
+    <div class="help-cards">
+      <div class="help-card">
+        <div class="help-button-sample">ということは</div>
+        <div><b>意味や帰結を一段ひらきます</b><p>先の内容を受けて、その意味や文脈から無理なく導ける帰結・推測を少し補い、理解を助けます。推測は断定せず、返答は「ということは、」から始まります。</p></div>
+      </div>
+      <div class="help-card">
+        <div class="help-button-sample">いいかえると</div>
+        <div><b>別の具体的な表現に置き換えます</b><p>同じ内容を保ちながら、より具体的な状況・具体例・身近なたとえなどを使って別の表現にします。新しい事実や因果関係を勝手に加えません。</p></div>
+      </div>
+      <div class="help-card">
+        <div class="help-button-sample">つまり</div>
+        <div><b>大事なところだけを短くします</b><p>文章の重要な意味や条件を残して要約します。同じボタンを続けて押すと、さらに短くまとめます。</p></div>
+      </div>
+      <div class="help-card">
+        <div class="help-button-sample">ほんとうに？</div>
+        <div><b>最初の文章と照らして確かめます</b><p>今の説明が元の文章からずれていないかを確認します。ずれがあれば丁寧に訂正します。設定によっては検索で事実確認もできます。</p></div>
+      </div>
+      <div class="help-card">
+        <div class="help-button-sample">わかった</div>
+        <div><b>理解できたことに短く応答します</b><p>そのやりとりに合った、丁寧で簡潔な返答をします。必要なら理解できたポイントを一言だけ確認します。</p></div>
+      </div>
+      <div class="help-card">
+        <div class="help-button-sample">わからん</div>
+        <div><b>別の視点でもう一度説明します</b><p>分かりにくかったことを丁寧に詫び、直前の説明を言い換えるだけでなく、一つ前の文章に戻って別の順序・視点・具体例で説明し直します。</p></div>
+      </div>
+    </div>
+
+    <div class="help-tips">
+      <div class="help-tip">
+        <b>文章の一部だけを反転選択してからボタンを押せます</b>
+        <p>その部分だけについて「ということは」「いいかえると」「つまり」などを実行します。「ほんとうに？」は、反転した部分を最初の原文とあらためて比較します。</p>
+      </div>
+      <div class="help-tip">
+        <b>数式・記号・図がある範囲も選べます</b>
+        <p>文字OCRだけでなく選択範囲の画像もAIに渡すため、分数、指数、平方根、数式記号、図中の文字なども読み取って説明できます。</p>
+      </div>
+      <div class="help-tip">
+        <b>吹き出しは自由に動かせます</b>
+        <p>上のグレーのバー、またはボタンのない空白部分をドラッグして移動できます。右端・下端・右下をドラッグすると大きさを変えられます。</p>
+      </div>
+      <div class="help-tip">
+        <b>設定ではAIと履歴を管理できます</b>
+        <p>Chrome内蔵AI、Gemini、OpenAIを切り替えられます。やりとりは時刻・使用AI・選択部分などとともにCSVで保存できます。</p>
+      </div>
+    </div>
+
+    <div class="help-footer-note">
+      説明の語彙と前提知識は、おおむね小学5年生までを想定し、言葉遣いは丁寧な「です・ます」調にしています。
+    </div>
+  </div>
+</div>
 
 <div id="qrModal" class="qr-modal-back hidden" role="dialog" aria-modal="true">
   <div class="qr-modal">
@@ -545,6 +685,10 @@
   const qrBtn = $('#qrBtn');
   const qrModal = $('#qrModal');
   const closeQr = $('#closeQr');
+
+  const helpBtn = $('#helpBtn');
+  const helpModal = $('#helpModal');
+  const closeHelp = $('#closeHelp');
 
   const settingsBtn = $('#settingsBtn');
   const modal = $('#settingsModal');
@@ -1357,8 +1501,10 @@ ${selected ? `\n【読み手が分からないと示した反転選択部分】\
 質問を復唱したり、「『ということは？』ですね。」のような前置きをしてはいけません。
 返答は必ず「ということは、」から始めてください。
 
-そのあと、「何がどうなるのか」「なぜそうなるのか」が分かるように丁寧に説明してください。
-単に短くするのではなく、意味がひらけて理解しやすくなる答えにしてください。
+そのあと、先に書かれている内容の意味や解釈をひらき、文脈から無理なく導ける帰結や推測を一段だけ補って、理解しやすくしてください。
+単なる言い換えや要約にはしないでください。
+ただし、原文や文脈から根拠なく新しい事実を作ってはいけません。
+推測を含む場合は「〜と考えられます」「〜の可能性があります」など、推測であることが分かる丁寧な表現にしてください。
 
 対象の文章：
 ${current}${scopeNote}`;
@@ -1371,8 +1517,10 @@ ${current}${scopeNote}`;
 質問を復唱したり、「『いいかえると？』ですね。」のような前置きをしてはいけません。
 返答は必ず「いいかえると、」から始めてください。
 
-意味を変えずに、より身近で具体的な言葉へ丁寧に言いかえてください。
-必要なら学校生活、家、遊び、道具、自然など、一般的に想像しやすいものを使ってかまいません。
+同じ内容を保ったまま、別の表現に言いかえてください。
+より具体的な状況や具体例、身近なたとえを使ってもかまいません。
+ただし、元の文章にない新しい事実や因果関係を加えてはいけません。
+たとえを使う場合も、元の内容との対応関係が分かるようにしてください。
 
 対象の文章：
 ${current}${scopeNote}`;
@@ -2100,6 +2248,16 @@ OCRされた文字と元画像が食い違う場合は、元画像を優先し�
   providerSelect.addEventListener('change',syncProviderUI);
   syncProviderUI();
 
+  helpBtn.addEventListener('click',()=>{
+    helpModal.classList.remove('hidden');
+  });
+  closeHelp.addEventListener('click',()=>{
+    helpModal.classList.add('hidden');
+  });
+  helpModal.addEventListener('click',ev=>{
+    if(ev.target===helpModal) helpModal.classList.add('hidden');
+  });
+
   qrBtn.addEventListener('click',()=>{
     qrModal.classList.remove('hidden');
   });
@@ -2117,7 +2275,9 @@ OCRされた文字と元画像が食い違う場合は、元画像を優先し�
   });
   document.addEventListener('keydown',ev=>{
     if(ev.key==='Escape'){
-      if(!qrModal.classList.contains('hidden')){
+      if(!helpModal.classList.contains('hidden')){
+        helpModal.classList.add('hidden');
+      }else if(!qrModal.classList.contains('hidden')){
         qrModal.classList.add('hidden');
       }else if(!modal.classList.contains('hidden')){
         closeSettingsModal();
