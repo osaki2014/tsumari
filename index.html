@@ -957,11 +957,66 @@
     actionButtons.forEach(b => b.disabled = v);
   }
 
-  function canvasPoint(ev){
-    const r = canvas.getBoundingClientRect();
+  // <canvas> 自体は workspace 全体の大きさですが、object-fit:contain により
+  // 実際の画像はその内側にレターボックス付きで表示されることがあります。
+  // getBoundingClientRect() は余白を含む canvas 要素全体を返すため、
+  // 実画像が描画されている表示領域を別に計算します。
+  function canvasContentRect(){
+    const r=canvas.getBoundingClientRect();
+
+    if(!canvas.width || !canvas.height || !r.width || !r.height){
+      return {
+        left:r.left, top:r.top, width:r.width, height:r.height,
+        right:r.right, bottom:r.bottom
+      };
+    }
+
+    const imageAspect=canvas.width/canvas.height;
+    const boxAspect=r.width/r.height;
+
+    let width,height,left,top;
+
+    if(imageAspect>boxAspect){
+      // 横幅いっぱい。上下に余白。
+      width=r.width;
+      height=width/imageAspect;
+      left=r.left;
+      top=r.top+(r.height-height)/2;
+    }else{
+      // 高さいっぱい。左右に余白。
+      height=r.height;
+      width=height*imageAspect;
+      top=r.top;
+      left=r.left+(r.width-width)/2;
+    }
+
     return {
-      x:(ev.clientX-r.left) * canvas.width / r.width,
-      y:(ev.clientY-r.top) * canvas.height / r.height
+      left,top,width,height,
+      right:left+width,
+      bottom:top+height
+    };
+  }
+
+  function canvasPoint(ev, clampToImage=false){
+    const r=canvasContentRect();
+
+    let px=ev.clientX;
+    let py=ev.clientY;
+
+    const outside=px<r.left || px>r.right || py<r.top || py>r.bottom;
+    if(outside && !clampToImage) return null;
+
+    // ドラッグを画像の外へ少しはみ出した場合は画像端に固定する。
+    px=Math.max(r.left,Math.min(r.right,px));
+    py=Math.max(r.top,Math.min(r.bottom,py));
+
+    return {
+      x:Math.max(0,Math.min(canvas.width,
+        (px-r.left)*canvas.width/r.width
+      )),
+      y:Math.max(0,Math.min(canvas.height,
+        (py-r.top)*canvas.height/r.height
+      ))
     };
   }
 
@@ -1063,17 +1118,26 @@
 
   canvas.addEventListener('pointerdown',ev=>{
     if(!baseImage || working) return;
+
+    // 黒い余白では選択を開始しない。
+    const p=canvasPoint(ev,false);
+    if(!p) return;
+
     dragging=true;
-    dragStart=canvasPoint(ev);
+    dragStart=p;
     selection={x:dragStart.x,y:dragStart.y,w:0,h:0};
     bubble.classList.remove('show');
-        setTimeout(()=>bubble.classList.add('hidden'),120);
+    setTimeout(()=>bubble.classList.add('hidden'),120);
     canvas.setPointerCapture(ev.pointerId);
   });
 
   canvas.addEventListener('pointermove',ev=>{
     if(!dragging || !dragStart) return;
-    const p=canvasPoint(ev);
+
+    // ドラッグ中に画像外へ出た場合は画像端までの選択にする。
+    const p=canvasPoint(ev,true);
+    if(!p) return;
+
     selection={
       x:Math.min(dragStart.x,p.x),
       y:Math.min(dragStart.y,p.y),
@@ -1083,9 +1147,10 @@
     draw();
   });
 
-  canvas.addEventListener('pointerup',async ()=>{
+  canvas.addEventListener('pointerup',async ev=>{
     if(!dragging) return;
     dragging=false;
+    try{canvas.releasePointerCapture(ev.pointerId)}catch(_e){}
     if(!selection || selection.w<24 || selection.h<18){
       selection=null;
       draw();
@@ -1185,17 +1250,24 @@
 
   function selectionRectInWorkspace(){
     if(!selection) return null;
+
     const wr=workspace.getBoundingClientRect();
-    const cr=canvas.getBoundingClientRect();
+    const cr=canvasContentRect();
     const sx=cr.width/canvas.width;
     const sy=cr.height/canvas.height;
+
+    const left=(cr.left-wr.left)+selection.x*sx;
+    const top=(cr.top-wr.top)+selection.y*sy;
+    const width=selection.w*sx;
+    const height=selection.h*sy;
+
     return {
-      left:(cr.left-wr.left)+selection.x*sx,
-      top:(cr.top-wr.top)+selection.y*sy,
-      width:selection.w*sx,
-      height:selection.h*sy,
-      right:(cr.left-wr.left)+(selection.x+selection.w)*sx,
-      bottom:(cr.top-wr.top)+(selection.y+selection.h)*sy
+      left,
+      top,
+      width,
+      height,
+      right:left+width,
+      bottom:top+height
     };
   }
 
