@@ -754,7 +754,7 @@
       </div>
       <div class="help-tip">
         <b>説明する学年を選べます</b>
-        <p>小学3年から中学3年までを設定できます。小3〜小6ではAIの生成後、別スレッドの日本語辞書で読みを確認し、配当漢字表と照合します。重い辞書処理を画面とは別に動かすため、操作を止めません。AIの再呼び出しはありません。初期値は小学5年です。</p>
+        <p>小学3年から中学3年までを設定できます。毎回のAI生成時に、漢字・熟語・語彙・一文の長さ・文章全体の長さ・接続表現・文の組み立て・表現技法まで、その学年の国語に合わせるよう強く指示します。初期値は小学5年です。なお、一文の字数や回答全体の字数は学習指導要領の規定値ではなく、本アプリの読みやすさ目安です。</p>
       </div>
       <div class="help-tip">
         <b>設定ではAIと履歴を管理できます</b>
@@ -819,8 +819,8 @@
       </div>
       <div class="grade-note">
         文部科学省の現行学習指導要領（平成29年告示）国語を基準に、
-        漢字・熟語・語彙・文の構成・表現技法をこの学年までに合わせます。
-        小3〜小6は、AIを1回だけ使ったあと、別スレッドで動く日本語辞書が単語の読みを確認し、学年別漢字配当表と照合します。辞書の準備中も画面操作は止まりません。未習漢字を含む語は、AIを再度呼ばず正しいひらがなへ変換します。
+        漢字・熟語・語彙・文の構成・接続表現・表現技法をこの学年までに合わせます。
+        小学校では学年別漢字配当表の実際の許可漢字を毎回AIへの指示に含めます。ローカル辞書による後処理は行いません。
       </div>
     </div>
 
@@ -958,9 +958,9 @@
     9:'その他の常用漢字の大体を読む段階'
   };
 
-  // 文部科学省・現行の学年別漢字配当表。
-  // 小3〜小6では、AI生成後にもこの実データで1文字ずつ再検査する。
-  const PRIMARY_GRADE_KANJI = {
+  // 小学校の学年別漢字配当表。ローカル判定には使わず、
+  // 毎回のAIプロンプトに「この学年までに使ってよい漢字」として渡す。
+  const PRIMARY_GRADE_KANJI_FOR_PROMPT={
     1:'一右雨円王音下火花貝学気九休玉金空月犬見五口校左三山子四糸字耳七車手十出女小上森人水正生青夕石赤千川先早草足村大男竹中虫町天田土二日入年白八百文木本名目立力林六',
     2:'引羽雲園遠何科夏家歌画回会海絵外角楽活間丸岩顔汽記帰弓牛魚京強教近兄形計元言原戸古午後語工公広交光考行高黄合谷国黒今才細作算止市矢姉思紙寺自時室社弱首秋週春書少場色食心新親図数西声星晴切雪船線前組走多太体台地池知茶昼長鳥朝直通弟店点電刀冬当東答頭同道読内南肉馬売買麦半番父風分聞米歩母方北毎妹万明鳴毛門夜野友用曜来里理話',
     3:'悪安暗医委意育員院飲運泳駅央横屋温化荷界開階寒感漢館岸起期客究急級宮球去橋業曲局銀区苦具君係軽血決研県庫湖向幸港号根祭皿仕死使始指歯詩次事持式実写者主守取酒受州拾終習集住重宿所暑助昭消商章勝乗植申身神真深進世整昔全相送想息速族他打対待代第題炭短談着注柱丁帳調追定庭笛鉄転都度投豆島湯登等動童農波配倍箱畑発反坂板皮悲美鼻筆氷表秒病品負部服福物平返勉放味命面問役薬由油有遊予羊洋葉陽様落流旅両緑礼列練路和',
@@ -969,36 +969,58 @@
     6:'異遺域宇映延沿我灰拡革閣割株干巻看簡危机揮貴疑吸供胸郷勤筋系敬警劇激穴絹権憲源厳己呼誤后孝皇紅降鋼刻穀骨困砂座済裁策冊蚕至私姿視詞誌磁射捨尺若樹収宗就衆従縦縮熟純処署諸除将傷障蒸針仁垂推寸盛聖誠宣専泉洗染善奏窓創装層操蔵臓存尊宅担探誕段暖値宙忠著庁頂潮賃痛展討党糖届難乳認納脳派拝背肺俳班晩否批秘腹奮並陛閉片補暮宝訪亡忘棒枚幕密盟模訳郵優幼欲翌乱卵覧裏律臨朗論俵券恩承敵胃腸舌退銭預'
   };
 
-  const PRIMARY_CUMULATIVE_KANJI = (()=>{
-    const out={};
-    let s='';
-    for(let grade=1;grade<=6;grade++){
-      s += PRIMARY_GRADE_KANJI[grade];
-      out[grade]=new Set([...s]);
+  function cumulativeKanjiForPrompt(grade){
+    let out='';
+    for(let g=1;g<=Math.min(6,grade);g++) out+=PRIMARY_GRADE_KANJI_FOR_PROMPT[g]||'';
+    return [...new Set([...out])].join('');
+  }
+
+  // 一文の長さ・総文字量は学習指導要領の規定値ではない。
+  // 本アプリで「教科書相当の読みやすさ」に寄せるための保守的な目安。
+  const GRADE_READABILITY_GUIDE={
+    3:{
+      total:'通常は80〜150字程度。必要でも180字程度まで',
+      sentence:'一文は20〜35字程度を中心にし、45字をこえない',
+      sentences:'3〜5文程度',
+      connectors:'「まず」「つぎに」「だから」「でも」「たとえば」など、意味がすぐ分かるものを中心にする'
+    },
+    4:{
+      total:'通常は100〜170字程度。必要でも210字程度まで',
+      sentence:'一文は25〜40字程度を中心にし、50字をこえない',
+      sentences:'3〜5文程度',
+      connectors:'「まず」「つぎに」「そのため」「しかし」「たとえば」などを使う'
+    },
+    5:{
+      total:'通常は120〜200字程度。必要でも250字程度まで',
+      sentence:'一文は30〜45字程度を中心にし、55字をこえない',
+      sentences:'3〜6文程度',
+      connectors:'「そのため」「しかし」「たとえば」「一方で」「つまり」などを、関係が明確なときだけ使う'
+    },
+    6:{
+      total:'通常は140〜230字程度。必要でも280字程度まで',
+      sentence:'一文は30〜50字程度を中心にし、60字をこえない',
+      sentences:'4〜6文程度',
+      connectors:'「そのため」「一方で」「しかし」「たとえば」「このことから」などを使える'
+    },
+    7:{
+      total:'通常は160〜270字程度。必要でも340字程度まで',
+      sentence:'一文は35〜55字程度を中心にし、70字をこえない',
+      sentences:'4〜7文程度',
+      connectors:'原因と結果、意見と根拠が分かる接続表現を使う'
+    },
+    8:{
+      total:'通常は180〜310字程度。必要でも400字程度まで',
+      sentence:'一文は40〜60字程度を中心にし、75字をこえない',
+      sentences:'4〜8文程度',
+      connectors:'「一方で」「したがって」「たとえば」「つまり」などを論理関係に応じて使う'
+    },
+    9:{
+      total:'通常は200〜350字程度。必要でも450字程度まで',
+      sentence:'一文は40〜65字程度を中心にし、80字をこえない',
+      sentences:'5〜9文程度',
+      connectors:'主張・根拠・具体例・対比・結論の関係が分かる接続表現を使う'
     }
-    return out;
-  })();
-
-  function isHanCharacter(ch){
-    return /\p{Script=Han}/u.test(ch);
-  }
-
-  function disallowedKanji(text,grade=currentGradeValue()){
-    if(grade>6) return [];
-    const allowed=PRIMARY_CUMULATIVE_KANJI[grade] || new Set();
-    return [...new Set(
-      [...String(text||'')].filter(ch=>isHanCharacter(ch) && !allowed.has(ch))
-    )];
-  }
-
-  function gradeKanjiCheckSummary(text,grade=currentGradeValue()){
-    const bad=disallowedKanji(text,grade);
-    return {
-      ok:bad.length===0,
-      forbidden:bad,
-      label:GRADE_LABELS[grade] || ''
-    };
-  }
+  };
 
   function loadGradeSetting(){
     let v=5;
@@ -1031,109 +1053,95 @@
   }
 
   function curriculumProfile(grade=currentGradeValue()){
-    const allowedKanji = grade<=6
-      ? [...(PRIMARY_CUMULATIVE_KANJI[grade] || [])].join('')
-      : '';
+    const label=GRADE_LABELS[grade] || '小学5年';
+    const readability=GRADE_READABILITY_GUIDE[grade] || GRADE_READABILITY_GUIDE[5];
+    const allowedKanji=grade<=6 ? cumulativeKanjiForPrompt(grade) : '';
 
-    const exactKanjiRule = grade<=6 ? `
+    const primaryKanjiRule=grade<=6 ? `
 
-【この学年までに説明文で使ってよい漢字の完全な許可リスト】
+【小学校の漢字：最重要】
+次の文字列は、${label}までに「読む」ことを学ぶ学年別漢字配当表の累積漢字です。
+説明本文で漢字を使う場合は、原則としてこの一覧にある漢字だけを使ってください。
+
 ${allowedKanji}
 
-重要：
-- 上の許可リストに無い漢字は、最終回答に1文字も出してはいけません。
-- 「たぶん習っているだろう」と記憶で判断せず、必ずこの許可リストだけを基準にしてください。
-- 回答を作ったあと、画面へ返す前に、回答中の漢字を内部で1文字ずつ許可リストと照合してください。
-- 許可リストにない漢字が1文字でも見つかったら、そのまま出力せず、同じ1回の生成処理の中で文章を書き直してから再点検してください。
-- この内部点検が終わるまで最終回答を返さないでください。
+必ず守ること：
+- この一覧にない漢字は、説明本文・見出し・文末のどこにも原則として出さないでください。
+- 迷った漢字は使わず、ひらがなにしてください。
+- 「種類」のように、意味そのものも学年より難しい語は、単に「しゅるい」と仮名にするだけでなく、「いくつかの分け方」「ちがうなかま」など、その場に合うやさしい言葉へひらいてください。
+- ただし、専門用語・分類名・正式名称など、別の言葉へ変えると内容が不正確になるキーワードは、用語全体を正しい読みのひらがなにしてください。
+  例：小学3年なら「裸子植物」→「らししょくぶつ」、「被子植物」→「ひししょくぶつ」。
+- 「ら子植物」のような、未習漢字だけを部分的にかなへ変えた混ぜ書きは禁止です。
+- 原文に難しい漢字があっても、それをそのままコピーしないでください。説明文はこの学年の表記に直してください。` : '';
 
-【未習漢字を含む専門用語の扱い】
-- 一般の言葉なら、対象学年までの言葉へ意味をひらいて置き換えてください。
-- 専門用語、正式名称、分類名、学術上のキーワードなど、別の言葉にすると正確さを失う語に未習漢字が1字でも含まれる場合は、その語全体を正しい読みのひらがなにしてください。
-- 一部の漢字だけをかなにする「混ぜ書き」は禁止です。
-- 例：小学3年では「裸子植物」は「らししょくぶつ」、「被子植物」は「ひししょくぶつ」、「維管束植物」は「いかんそくしょくぶつ」と書きます。
-- 数式記号、アルファベット、数字は漢字許可リストの対象外です。` : '';
-
-    const common=`【学年制約：最優先】
-対象は「${GRADE_LABELS[grade]}」までの国語学習です。
-これは文章を短くするだけの設定ではありません。説明文そのものの漢字、熟語、語彙、文の組み立て、文章の展開、表現技法を、この学年までに学ぶ範囲へ合わせてください。
-${exactKanjiRule}
-
-共通ルール：
-- 言葉遣いは、丁寧な話し言葉の「です・ます」調にする。
-- 内容の正確さや原文の意味は変えない。
-- 対象学年より難しい語、熟語、漢字、文法的な組み立て、表現技法を説明に使わない。
-- 固有名詞・正式名称・専門用語が必要でも、小学校設定では未習漢字をそのまま残さない。
-- 熟語の各文字が許可されていても、その熟語の意味自体が対象学年には難しい場合は、やさしい複数の言葉へひらく。
-- 一文を長くしすぎない。主語と述語、修飾する言葉とされる言葉の関係が分かる文にする。
-- 最終回答には、内部で行った学年チェックや漢字チェックの説明を書かない。`;
-
-    const profiles={
-      3:`${common}
-
-【小学3年まで】
-漢字：${GRADE_KANJI_COUNTS[3]}までを基本にする。
-語彙・熟語：日常生活、学校生活、身近な自然や社会で使う具体的な言葉を中心にする。漢字の熟語を使うときも、意味をそのまま想像しにくい抽象的な熟語は避ける。
-文の構成：主語と述語の対応をはっきりさせる。修飾する言葉が何を説明しているかを近くに置く。指示語や接続語は「これ」「そのため」「だから」「しかし」など意味が追いやすいものを使う。段落は一つの中心内容をもつようにする。
-文章の展開：「まず」「次に」「だから」など、出来事や理由の順序が見える展開にする。
-表現技法：「比喩」「反復」「倒置」「体言止め」という専門名称を理解済みとは扱わない。必要なら「〜のようにたとえています」「同じ言葉をくり返しています」のように名称を使わず説明する。`,
-
-      4:`${common}
-
-【小学4年まで】
-漢字：${GRADE_KANJI_COUNTS[4]}までを基本にする。
-語彙・熟語：第3・4学年で増える漢字の熟語を使えるが、抽象度の高い語や意味を推測しにくい熟語は、具体的な言葉へひらく。
-文の構成：主語と述語、修飾と被修飾の関係を明確にする。指示語・接続語を使って文と文のつながりを示す。段落どうしの関係や中心となる内容が追えるようにする。
-文章の展開：理由、例、結論の順序が見える簡単な構成にする。説明が飛ばないようにする。
-表現技法：「比喩」「反復」「倒置」「体言止め」の名称を前提知識にしない。たとえやくり返しを使う場合は、何を表しているのか本文から分かる形にする。`,
-
-      5:`${common}
-
-【小学5年まで】
-漢字：${GRADE_KANJI_COUNTS[5]}までを基本にする。
-語彙・熟語：日常・学校・社会・科学で使う語を広げてよいが、抽象的な熟語は具体的な出来事や動作に置き換える。思考に関わる言葉も、意味が一読で分かるものを選ぶ。
-文の構成：語句と語句の関係、語順、文と文のつながりを明確にし、文章全体の構成が見えるようにする。主語が省かれて分かりにくくならないようにする。
-文章の展開：事実と考え、理由と結論、例と説明を分け、段落の役割が追えるようにする。
-表現技法：比喩や反復などの「表現の工夫」に気付く段階として扱う。「比喩」「反復」を使う場合は意味もやさしく示す。倒置・体言止めは名称を既習として前提にせず、「語順を変えた言い方」「名詞で文を止めた言い方」のようにひらく。`,
-
-      6:`${common}
-
-【小学6年まで】
-漢字：${GRADE_KANJI_COUNTS[6]}までを基本にする。
-語彙・熟語：小学校段階の語彙を十分に使ってよいが、中学校段階の抽象語・専門的な熟語を説明なしで置かない。
-文の構成：文中の語句の係り方、語順、文と文の関係、文章の様々な構成を意識し、読み手が筋道を追える形にする。日常的な敬語も適切に使う。
-文章の展開：原因と結果、事実と考え、具体例とまとめの関係を明示し、文章全体の構成を見通しやすくする。
-表現技法：比喩や反復などの表現の工夫は扱ってよい。倒置や体言止めを使う必要がある場合は、名称だけに頼らず、どのような言い方かをやさしく説明する。`,
-
-      7:`${common}
-
-【中学1年まで】
-漢字：${GRADE_KANJI_COUNTS[7]}を目安にする。難しい常用漢字を無理に使わず、読みやすさを優先する。
-語彙・熟語：事象や行為を表す多様な語句を使ってよい。辞書的な意味と文脈上の意味が異なる語は、その文での意味が分かるようにする。
-文の構成：段落の役割、文と文の接続、指示語・接続する語句、単語の類別を踏まえ、全体と部分、事実と意見、原因と結果、意見と根拠の関係を追える構成にする。
-文章の展開：中心部分と補足部分を分け、要点や要旨が分かるようにする。
-表現技法：比喩、反復、倒置、体言止めなどの名称と働きを使ってよい。ただし説明のために必要な場合だけ使い、名称を並べるだけにしない。`,
-
-      8:`${common}
-
-【中学2年まで】
-漢字：${GRADE_KANJI_COUNTS[8]}を目安にする。
-語彙・熟語：抽象的な概念を表す語、類義語・対義語、同音異義語、多義語を扱ってよい。ただし必要以上に抽象語を重ねず、具体例との対応を示す。
-文の構成：単語の活用、助詞・助動詞、文の成分の順序や照応を踏まえ、複文でも関係が明確になるようにする。話や文章の構成・展開を意識する。
-文章の展開：意見と根拠、具体と抽象など、情報どうしの関係を明示する。論理の飛躍を避ける。
-表現技法：比喩、反復、倒置、体言止めなどを理解済みとして使えるが、読みやすさを優先する。`,
-
-      9:`${common}
-
-【中学3年まで】
-漢字：${GRADE_KANJI_COUNTS[9]}を目安にする。
-語彙・熟語：慣用句や四字熟語、和語・漢語・外来語の使い分けを含む中学校段階の語彙を使ってよい。ただし、難解な専門語を説明なしで置かない。
-文の構成：話や文章の種類と特徴を踏まえ、目的に合った文型と構成を選ぶ。複雑な文でも照応関係を明確にする。
-文章の展開：論理の展開、事実・根拠・主張の関係を明確にし、必要なら複数の見方を整理する。
-表現技法：比喩、反復、倒置、体言止めなどの効果を理解した表現を使ってよい。ただし、説明文では効果より明瞭さを優先する。`
+    const gradeDetails={
+      3:`【小学3年までの国語】
+- 主語と述語の対応をはっきりさせます。
+- 修飾する言葉は、説明する言葉の近くに置きます。
+- 一つの文に情報を詰め込みません。
+- 日常生活、学校生活、身近な自然や社会で使う具体的な語を中心にします。
+- 抽象的な熟語、専門分野だけで使う語、長い漢語の連続は避けます。
+- 比喩・反復・倒置・体言止めという専門名称は前提にしません。必要なら「〜のようにたとえています」など普通の言葉で説明します。
+- 接続は、順序・理由・反対・例がすぐ分かる単純なものを中心にします。`,
+      4:`【小学4年までの国語】
+- 主語と述語、修飾する語とされる語の関係を明確にします。
+- 段落の中心が分かるようにし、理由・例・まとめの順序を追いやすくします。
+- 具体的な語を優先し、抽象的な熟語を続けません。
+- 比喩などを使う場合も、その意味が本文だけで分かるようにします。
+- 接続語は文と文の関係をはっきりさせるためにだけ使います。`,
+      5:`【小学5年までの国語】
+- 語句と語句の関係、語順、文と文のつながり、文章全体の構成が見えるようにします。
+- 事実と考え、理由と結論、例と説明を分けます。
+- 思考に関わる語も使えますが、一読で意味が分からない抽象語は具体的な出来事や動作に直します。
+- 比喩や反復などの「表現の工夫」は扱えますが、名称だけで説明を終えません。
+- 倒置・体言止めは既習の専門用語として前提にせず、「語順を変えた言い方」「名詞で文を止めた言い方」のようにひらきます。`,
+      6:`【小学6年までの国語】
+- 語句の係り方、語順、文と文の関係、文章の構成と展開を意識します。
+- 原因と結果、事実と考え、具体例とまとめの関係を明示します。
+- 小学校段階を超える抽象語・専門的な熟語は、説明なしで置きません。
+- 比喩や反復などの表現の工夫は扱えますが、説明文では分かりやすさを優先します。`,
+      7:`【中学1年までの国語】
+- 事象や行為を表す語句を広げつつ、辞書的な意味と文脈上の意味を区別します。
+- 指示する語句と接続する語句の役割を明確にします。
+- 原因と結果、意見と根拠、全体と部分の関係が追える構成にします。
+- 比喩、反復、倒置、体言止めなどは名称と働きを使ってよい段階です。ただし必要な場合だけ使います。`,
+      8:`【中学2年までの国語】
+- 抽象的な概念語、類義語・対義語、同音異義語、多義語を扱えますが、抽象語を重ねません。
+- 文の成分の順序や照応、助詞・助動詞の働きを踏まえ、複文でも関係を明確にします。
+- 意見と根拠、具体と抽象の関係を明示し、論理の飛躍を避けます。`,
+      9:`【中学3年までの国語】
+- 慣用句や四字熟語、和語・漢語・外来語を適切に使い分けられます。
+- 話や文章の種類と特徴に応じ、事実・根拠・主張の関係を明確にします。
+- 複数の見方を整理できますが、説明文では難解さより明瞭さを優先します。`
     };
 
-    return profiles[grade] || profiles[5];
+    return `【学年制約：他の指示より優先】
+対象は「${label}」です。
+生成する説明は、現行の小・中学校学習指導要領の国語で、この学年までに学ぶ範囲を上限として書いてください。
+原文が大学・高校レベルでも、説明側の語彙・漢字・熟語・文の構成・接続表現・表現技法は必ずこの学年までへひらいてください。
+${primaryKanjiRule}
+
+${gradeDetails[grade] || gradeDetails[5]}
+
+【文章の読みやすさ：このアプリでの目安】
+※次の文字数は学習指導要領そのものの規定値ではありません。教科書相当の読みやすさに寄せるための本アプリの目安です。
+- 回答全体：${readability.total}
+- 一文：${readability.sentence}
+- 文の数：${readability.sentences}
+- 接続表現：${readability.connectors}
+
+【毎回、出力直前に内部で必ず確認】
+1. 漢字はこの学年までか。迷う漢字はひらがなにしたか。
+2. 漢字が読めても、熟語や語彙そのものがこの学年には難しくないか。
+3. 専門用語を残す必要があるとき、未習漢字を含む用語全体を正しいひらがなにしたか。
+4. 一文が長すぎないか。主語と述語が遠く離れていないか。
+5. 修飾する言葉が何にかかるか明確か。
+6. 接続詞を使いすぎていないか。関係が明確な場合だけ使っているか。
+7. 説明の順序が、対象学年の教科書で読める程度に単純で追いやすいか。
+8. 比喩・反復・倒置・体言止めなどを、その学年より先の知識として要求していないか。
+9. 不要な前置き、メタ説明、難しい見出しを入れていないか。
+
+この点検結果は本文には書かず、条件を満たした説明だけを返してください。`;
   }
 
   let state = freshState();
@@ -1984,7 +1992,10 @@ ${curriculum}
 - もし選択範囲内にグラフや表があるときは、項目名、軸、数値、増減、比較関係が分かるように説明する。
 - 子ども扱いする話し方、幼児語、くだけすぎた言い方は使わない。
 - 難しい専門語や抽象語はできるだけ避ける。
-- 必要な専門語を使う場合は、その場で短く意味を説明する。
+- 必要な専門語を使う場合は、現在の学年で読める表記にし、その場で短く意味をひらく。
+- 原文にある難しい漢字・熟語・表現を、そのままコピーして説明文に持ち込まない。
+- 同じ意味を保てるなら、漢語よりも日常的な和語や短い言い方を優先する。
+- 「〜において」「〜に関して」「〜を踏まえて」「〜に伴い」のような硬い表現は、対象学年で自然な短い言い方へ直す。
 - 元の文章にない事実を勝手に追加しない。
 - 矩形選択の内側にあるグラフ・表・図の内容は扱ってよい。
 - 選択範囲の外側にある写真・図・投稿・見出し・周辺画面の内容を推測しない。
@@ -2036,7 +2047,8 @@ ${selected ? `\n【読み手が分からないと示した反転選択部分】\
 重要：
 - ${selected ? '今回は反転選択された部分に焦点を当てて説明を作り直す。' : 'さきほどの説明文を単に言い換えるのではなく、一つ前の文章から説明を作り直す。'}
 - 何が難しかったかを勝手に決めつけない。
-- 語彙・漢字・熟語・文の構成・表現技法は、現在の学年設定に合わせる。
+- 語彙・漢字・熟語・文の構成・接続詞・表現技法は、現在の学年設定を厳密に守る。
+- 直前の説明に学年より難しい表現があった可能性も考え、より短い文・より具体的な語で作り直す。
 - 丁寧な「です・ます」調にする。
 - できるだけ具体的にしながらも、長くしすぎない。
 - 吹き出しにそのまま表示する返答だけを書く。`;
@@ -2137,8 +2149,9 @@ ${selected ? '今回は反転選択された部分を中心に検証してくだ
 - 情報源の名前は本文中で自然に触れてよいが、URL一覧は本文に書かない。
 - 「うん」「ごめん」「〜なんだよ」など、くだけた言い方は使わない。
 - 丁寧な「です・ます」調にする。
-- 外部資料の内容が難しくても、その説明本文は必ず現在の学年設定までの漢字・熟語・語彙・文の構成にひらいて書く。
-- 出力前に学年制約をもう一度点検し、対象学年より難しい表現が残っていれば書き直す。`;
+- 外部資料の内容が難しくても、その説明本文は必ず現在の学年設定までの漢字・熟語・語彙・文の長さ・接続表現・文章構成にひらいて書く。
+- 参照資料の正式名称やリンク自体はアプリ側で別に表示するため、本文で難しい機関名・論文名を無理に繰り返さない。
+- 出力前に学年制約をもう一度点検し、対象学年より難しい表現が残っていれば、同じ生成の中で書き直してから最終文だけ返す。`;
   }
 
   const providerModels = {
@@ -2333,378 +2346,6 @@ ${selected ? '今回は反転選択された部分を中心に検証してくだ
     return new Error(msg || `Gemini API: HTTP ${res.status}`);
   }
 
-
-  // 学年別漢字の読み変換は、画面を止めないよう Web Worker で実行する。
-  let gradeWorker=null;
-  let gradeWorkerUrl='';
-  let gradeWorkerReadyPromise=null;
-  let gradeWorkerReadyResolve=null;
-  let gradeWorkerReadyReject=null;
-  let gradeWorkerSeq=0;
-  const gradeWorkerPending=new Map();
-
-  function timeoutPromise(ms,message){
-    return new Promise((_,reject)=>{
-      setTimeout(()=>reject(new Error(message)),ms);
-    });
-  }
-
-  function createGradeWorker(){
-    if(gradeWorker) return gradeWorker;
-
-    const workerSource=`
-      let tokenizer=null;
-      let building=false;
-      let ready=false;
-      const waiting=[];
-
-      function fatal(message){
-        postMessage({type:'fatal',message:String(message||'日本語辞書の準備に失敗しました。')});
-      }
-
-      function buildTokenizer(){
-        if(ready || building) return;
-        building=true;
-
-        try{
-          importScripts('https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/build/kuromoji.js');
-        }catch(e){
-          fatal('日本語解析ライブラリを読み込めませんでした。');
-          return;
-        }
-
-        try{
-          kuromoji.builder({
-            dicPath:'https://cdn.jsdelivr.net/npm/kuromoji@0.1.2/dict/'
-          }).build((err,t)=>{
-            if(err){
-              fatal('日本語辞書を準備できませんでした。');
-              return;
-            }
-
-            tokenizer=t;
-            ready=true;
-            building=false;
-            postMessage({type:'ready'});
-
-            while(waiting.length){
-              tokenize(waiting.shift());
-            }
-          });
-        }catch(e){
-          fatal(e && e.message ? e.message : '日本語辞書を準備できませんでした。');
-        }
-      }
-
-      function tokenize(job){
-        if(!ready || !tokenizer){
-          waiting.push(job);
-          buildTokenizer();
-          return;
-        }
-
-        try{
-          const tokens=tokenizer.tokenize(String(job.text||''));
-          postMessage({type:'result',id:job.id,tokens});
-        }catch(e){
-          postMessage({
-            type:'error',
-            id:job.id,
-            message:e && e.message ? e.message : '日本語の読み取りに失敗しました。'
-          });
-        }
-      }
-
-      onmessage=(ev)=>{
-        const msg=ev.data||{};
-        if(msg.type==='init'){
-          buildTokenizer();
-          return;
-        }
-        if(msg.type==='tokenize'){
-          tokenize({id:msg.id,text:msg.text});
-        }
-      };
-    `;
-
-    const blob=new Blob([workerSource],{type:'text/javascript'});
-    gradeWorkerUrl=URL.createObjectURL(blob);
-    gradeWorker=new Worker(gradeWorkerUrl);
-
-    gradeWorkerReadyPromise=new Promise((resolve,reject)=>{
-      gradeWorkerReadyResolve=resolve;
-      gradeWorkerReadyReject=reject;
-    });
-
-    gradeWorker.onmessage=(ev)=>{
-      const msg=ev.data||{};
-
-      if(msg.type==='ready'){
-        gradeWorkerReadyResolve?.(true);
-        return;
-      }
-
-      if(msg.type==='fatal'){
-        const error=new Error(msg.message||'日本語辞書の準備に失敗しました。');
-        gradeWorkerReadyReject?.(error);
-        for(const pending of gradeWorkerPending.values()){
-          pending.reject(error);
-        }
-        gradeWorkerPending.clear();
-        return;
-      }
-
-      if(msg.type==='result'){
-        const pending=gradeWorkerPending.get(msg.id);
-        if(!pending) return;
-        gradeWorkerPending.delete(msg.id);
-        pending.resolve(msg.tokens||[]);
-        return;
-      }
-
-      if(msg.type==='error'){
-        const pending=gradeWorkerPending.get(msg.id);
-        if(!pending) return;
-        gradeWorkerPending.delete(msg.id);
-        pending.reject(new Error(msg.message||'日本語の読み取りに失敗しました。'));
-      }
-    };
-
-    gradeWorker.onerror=(ev)=>{
-      const error=new Error('学年別漢字の日本語辞書を起動できませんでした。');
-      gradeWorkerReadyReject?.(error);
-      for(const pending of gradeWorkerPending.values()){
-        pending.reject(error);
-      }
-      gradeWorkerPending.clear();
-      console.error('grade worker error',ev);
-    };
-
-    gradeWorker.postMessage({type:'init'});
-    return gradeWorker;
-  }
-
-  async function ensureGradeWorkerReady(){
-    createGradeWorker();
-    return Promise.race([
-      gradeWorkerReadyPromise,
-      timeoutPromise(
-        25000,
-        '学年別漢字の日本語辞書の準備に時間がかかっています。少し待ってから、もう一度ボタンを押してください。'
-      )
-    ]);
-  }
-
-  async function tokenizeInGradeWorker(text){
-    const worker=createGradeWorker();
-    await ensureGradeWorkerReady();
-
-    const id=++gradeWorkerSeq;
-    const resultPromise=new Promise((resolve,reject)=>{
-      gradeWorkerPending.set(id,{resolve,reject});
-    });
-
-    worker.postMessage({
-      type:'tokenize',
-      id,
-      text:String(text||'')
-    });
-
-    try{
-      return await Promise.race([
-        resultPromise,
-        timeoutPromise(
-          12000,
-          '学年別漢字の読み確認に時間がかかっています。もう一度お試しください。'
-        )
-      ]);
-    }finally{
-      gradeWorkerPending.delete(id);
-    }
-  }
-
-  function katakanaToHiragana(text){
-    return String(text||'').replace(/[\u30a1-\u30f6]/g,ch=>
-      String.fromCharCode(ch.charCodeAt(0)-0x60)
-    );
-  }
-
-  function tokenStart(token){
-    return Math.max(0,(Number(token?.word_position)||1)-1);
-  }
-
-  function tokenEnd(token){
-    return tokenStart(token)+String(token?.surface_form||'').length;
-  }
-
-  function tokenReadingHiragana(token){
-    const raw=
-      (token?.reading && token.reading!=='*' ? token.reading : '') ||
-      (token?.pronunciation && token.pronunciation!=='*' ? token.pronunciation : '');
-    return raw ? katakanaToHiragana(raw) : '';
-  }
-
-  function nounLikeToken(token){
-    return token?.pos==='名詞' || token?.pos==='接頭詞';
-  }
-
-  function reconstructTokenReading(tokens,startIndex,endIndex){
-    let reading='';
-    for(let i=startIndex;i<endIndex;i++){
-      const r=tokenReadingHiragana(tokens[i]);
-      if(!r) return '';
-      reading+=r;
-    }
-    return reading;
-  }
-
-  function allHiraganaWithTokenizer(text,tokens){
-    let out='';
-    let cursor=0;
-
-    for(const token of tokens){
-      const start=tokenStart(token);
-      const end=tokenEnd(token);
-
-      if(start>cursor) out+=text.slice(cursor,start);
-
-      const surface=text.slice(start,end) || String(token.surface_form||'');
-      const reading=tokenReadingHiragana(token);
-
-      if([...surface].some(isHanCharacter) && reading){
-        out+=reading;
-      }else{
-        out+=surface;
-      }
-
-      cursor=end;
-    }
-
-    if(cursor<text.length) out+=text.slice(cursor);
-    return out;
-  }
-
-  async function normalizeKanjiForGrade(text,grade=currentGradeValue()){
-    const original=String(text||'').trim();
-
-    if(!original || grade>6){
-      return {text:original,mode:'not-required',remaining:[]};
-    }
-
-    const firstCheck=disallowedKanji(original,grade);
-    if(!firstCheck.length){
-      return {text:original,mode:'already-safe',remaining:[]};
-    }
-
-    if(working){
-      bubbleText.innerHTML=
-        `<span class="loading-row"><span class="spinner"></span>${escapeHTML(GRADE_LABELS[grade])}までの漢字に整えています…</span>`;
-    }
-
-    const tokens=await tokenizeInGradeWorker(original);
-
-    let out='';
-    let cursor=0;
-    let i=0;
-
-    while(i<tokens.length){
-      const token=tokens[i];
-      const start=tokenStart(token);
-
-      if(start>cursor){
-        out+=original.slice(cursor,start);
-      }
-
-      // 専門用語や分類名は複数の名詞に分割されることが多い。
-      // 連続する名詞を一まとまりとして読みへ変換することで、
-      // 「裸子植物」→「らししょくぶつ」のような不自然でない表記にする。
-      if(nounLikeToken(token)){
-        let j=i+1;
-        let groupEnd=tokenEnd(token);
-
-        while(j<tokens.length){
-          const next=tokens[j];
-          const nextStart=tokenStart(next);
-          if(
-            !nounLikeToken(next) ||
-            nextStart!==groupEnd
-          ) break;
-
-          groupEnd=tokenEnd(next);
-          j++;
-        }
-
-        const surface=original.slice(start,groupEnd);
-        const forbidden=disallowedKanji(surface,grade);
-
-        if(forbidden.length){
-          const reading=reconstructTokenReading(tokens,i,j);
-          if(reading && ![...reading].some(isHanCharacter)){
-            out+=reading;
-          }else{
-            // 辞書が複合語全体の読みを作れない場合は語ごとに処理する。
-            for(let k=i;k<j;k++){
-              const part=tokens[k];
-              const partSurface=original.slice(tokenStart(part),tokenEnd(part));
-              if(disallowedKanji(partSurface,grade).length){
-                const partReading=tokenReadingHiragana(part);
-                out+=partReading || partSurface;
-              }else{
-                out+=partSurface;
-              }
-            }
-          }
-        }else{
-          out+=surface;
-        }
-
-        cursor=groupEnd;
-        i=j;
-        continue;
-      }
-
-      const end=tokenEnd(token);
-      const surface=original.slice(start,end) || String(token.surface_form||'');
-
-      if(disallowedKanji(surface,grade).length){
-        const reading=tokenReadingHiragana(token);
-        out+=reading || surface;
-      }else{
-        out+=surface;
-      }
-
-      cursor=end;
-      i++;
-    }
-
-    if(cursor<original.length){
-      out+=original.slice(cursor);
-    }
-
-    let remaining=disallowedKanji(out,grade);
-    if(!remaining.length){
-      return {text:out.trim(),mode:'local-reading',remaining:[]};
-    }
-
-    // 念のための最終安全策。
-    // 同じKuromoji解析結果から全文の漢字を読みへ変えるだけで、
-    // AIへの2回目の通信は一切行わない。
-    const allKana=allHiraganaWithTokenizer(original,tokens).trim();
-    remaining=disallowedKanji(allKana,grade);
-
-    if(!remaining.length){
-      return {text:allKana,mode:'all-hiragana-fallback',remaining:[]};
-    }
-
-    // 未知語などで辞書に読みが無い場合だけ、未習漢字入りの文章を表示せず、
-    // 問題の語を明示して再選択を促す。
-    const e=new Error(
-      `${GRADE_LABELS[grade]}ではまだ使わない漢字「${remaining.join('、')}」の読みを辞書で確認できませんでした。選ぶ範囲を少し短くして、もう一度お試しください。`
-    );
-    e.kind='grade-reading';
-    throw e;
-  }
-
   function promptWithVisualContext(action, selectedText=''){
     return `${promptFor(action, selectedText)}
 
@@ -2856,10 +2497,7 @@ ${selected ? '今回は反転選択された部分を中心に検証してくだ
       const stream=session.promptStreaming(multimodalPrompt);
       for await (const chunk of stream){
         full += String(chunk||'');
-        // 小学校設定では、学年別漢字のローカル照合前の生データを表示しない。
-        if(currentGradeValue()>6){
-          bubbleText.textContent=full;
-        }
+        bubbleText.textContent=full;
       }
       if(!full.trim()) throw new Error('Chrome内蔵AIから文章が返りませんでした。');
       if(action==='verify'){
@@ -3169,7 +2807,6 @@ ${selected ? '今回は反転選択された部分を中心に検証してくだ
     if(p==='gemini') return callGemini(action, selectedText);
     return callOpenAI(action, selectedText);
   }
-
 
   function safeHttpUrl(value){
     try{
@@ -3497,22 +3134,6 @@ ${selected ? '今回は反転選択された部分を中心に検証してくだ
       try{
         const rawOutput=await callAI(action, selectedText);
         const result=normalizeAIResult(rawOutput);
-
-        const gradeResolved=await normalizeKanjiForGrade(
-          result.text,
-          currentGradeValue()
-        );
-        result.text=gradeResolved.text;
-
-        // 漢字を読みへ置換すると検索引用の文字位置が変わるため、
-        // 本文内の位置指定引用だけ外す。下部の参照資料リンクは保持する。
-        if(
-          gradeResolved.mode==='local-reading' ||
-          gradeResolved.mode==='all-hiragana-fallback'
-        ){
-          result.citations=[];
-        }
-
         const output=result.text;
 
         state.currentText=output;
@@ -3541,7 +3162,6 @@ ${selected ? '今回は反転選択された部分を中心に検証してくだ
         const extra=[
           selectedText ? '吹き出し内の反転選択部分のみを対象' : '',
           action==='verify' ? (result.searched ? '外部資料検索あり' : '外部資料検索なし') : '',
-          currentGradeValue()<=6 ? `AI1回＋ローカル配当漢字照合: ${gradeResolved.mode}` : '中学校学年設定を適用',
           sourceSummary
         ].filter(Boolean).join(' | ');
 
@@ -3560,14 +3180,6 @@ ${selected ? '今回は反転選択された部分を中心に検証してくだ
         if(e.message!=='API Key未設定'){
           if(e.kind==='billing'){
             await replaceBubbleText('OpenAI API Keyは届いていますが、API残高がありません。\n\n⚙ 設定でGeminiに切り替えることもできます。');
-          }else if(
-            e.kind==='grade-reading' ||
-            /学年別漢字|日本語辞書|読み確認/.test(String(e.message||''))
-          ){
-            await replaceBubbleText(
-              '学年に合わせるための漢字確認を完了できませんでした。\n\n'+
-              String(e.message||'少し待ってから、もう一度お試しください。')
-            );
           }else{
             const aiName=providerName();
             await replaceBubbleText(aiName+'を利用できませんでした。\n\n'+e.message);
@@ -3593,31 +3205,11 @@ ${selected ? '今回は反転選択された部分を中心に検証してくだ
   syncProviderUI();
   updateGradeUI();
 
-  const preloadGradeDictionary=()=>{
-    if(currentGradeValue()>6) return;
-    ensureGradeWorkerReady().catch(err=>{
-      console.warn('学年別漢字辞書の事前準備:',err.message);
-    });
-  };
-
-  if('requestIdleCallback' in window){
-    requestIdleCallback(preloadGradeDictionary,{timeout:3000});
-  }else{
-    setTimeout(preloadGradeDictionary,1200);
-  }
-
-
   gradeSlider.addEventListener('input',()=>{
     explanationGrade=Number(gradeSlider.value);
     try{localStorage.setItem('kotobaHirakuGrade',String(explanationGrade))}catch(_e){}
     updateGradeUI();
     settingsState.textContent=`説明学年：${currentGradeLabel()} に設定しました。`;
-
-    if(explanationGrade<=6){
-      ensureGradeWorkerReady().catch(err=>{
-        console.warn('学年別漢字辞書:',err.message);
-      });
-    }
   });
 
   helpBtn.addEventListener('click',()=>{
@@ -3727,14 +3319,6 @@ ${selected ? '今回は反転選択された部分を中心に検証してくだ
   canvas.height=720;
   draw();
 })();
-
-  window.addEventListener('beforeunload',()=>{
-    try{gradeWorker?.terminate()}catch(_e){}
-    try{
-      if(gradeWorkerUrl) URL.revokeObjectURL(gradeWorkerUrl);
-    }catch(_e){}
-  });
-
 </script>
 </body>
 </html>
